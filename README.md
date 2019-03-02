@@ -1,7 +1,6 @@
-# EXSAN
-## An (E)NDF (C)ross (S)ection (An)alysis and visualization application for nuclear sciences and engineering
+# EXSAN: An (E)NDF (C)ross (S)ection (An)alysis and visualization application for nuclear sciences and engineering
 
-### Welcome
+## Welcome
 
 Thank you for your interest in EXSAN. If you like the code, please send feedback to hasani@lanl.gov.
 
