@@ -5,7 +5,6 @@
 
 Thank you for your interest in EXSAN. If you like the code, please send feedback to hasani@lanl.gov.
 
-### Cite
 If EXSAN helps you in your research, please cite this [**open source article**](https://goo.gl/MPt6eY) from the Annals of Nuclear Energy:
 
 Wooten, H., *"An application for streamlined and automated ENDF Cross Section Analysis and visualization,"* Ann Nuc Energy,     **129**, 482-486, 2019
