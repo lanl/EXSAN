@@ -13,7 +13,9 @@ Wooten, H., *"An application for streamlined and automated ENDF Cross Section An
 
 ### Requirements
 1. EXSAN is written in Python 2.7, and requires the [Python (2.7) Anaconda distribution](https://www.anaconda.com/distribution/).
-2. Processing raw ENDF files requires an [NJOY 2016](https://www.njoy21.io/NJOY2016/) executable. Instructions for downloading and compiling the source code are [here](http://www.njoy21.io/Build/index.html)
+
+2. Processing raw ENDF files requires an [NJOY 2016](https://www.njoy21.io/NJOY2016/) executable. Instructions for downloading and compiling NJOY are [here](http://www.njoy21.io/Build/index.html).
+
 3. After cloning the repository, create a subdirectory called `working`.  In `working`, create a softlink to your NJOY 2016 executable.
 
 ### Caveats
