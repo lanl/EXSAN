@@ -20,3 +20,6 @@ Wooten, H., *"An application for streamlined and automated ENDF Cross Section An
 
 ### Caveats
 EXSAN has been tested on Mac OSX 10.11 and higher. It has **not** yet been tested on any other operating systems!
+
+### Release
+This software has been approved for open source release by Los Alamos National Laboratory and has been assigned **LA-CC-19-002**.
