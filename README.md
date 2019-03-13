@@ -23,7 +23,27 @@ After Anaconda installation, make sure that Anaconda is pre-pended to your path.
 
 **3. Install NJOY2016**
 
-Processing raw ENDF files requires an [NJOY 2016](https://www.njoy21.io/NJOY2016/) executable. Instructions for downloading and compiling NJOY are [here](http://www.njoy21.io/Build/index.html).
+Processing raw ENDF files requires an [NJOY 2016](https://www.njoy21.io/NJOY2016/) executable. Instructions for downloading and compiling NJOY are [here](http://www.njoy21.io/Build/index.html). The minor modifications required to obtain NJOY2016 are as follows:
+```
+# Download the source code
+git clone https://github.com/njoy/NJOY2016.git
+
+# Get the desired version of NJOY21 (1.0.0 in this example)
+cd NJOY2016
+wget https://raw.githubusercontent.com/njoy/signatures/master/NJOY21/1.0.0-NJOY21.json
+./metaconfigure/fetch_subprojects.py 1.0.0-NJOY21.json
+
+# Configure the build process
+mkdir bin
+cd bin
+cmake -D fetched_subprojects=true -D CMAKE_BUILD_TYPE=release ../
+
+# Build NJOY1
+make
+
+# Test NJOY1
+make test
+```
 
 **4. Create a softlink for the NJOY2016 executable in the `EXSAN/working` subdirectory and name it `njoy`.**
 
