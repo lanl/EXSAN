@@ -47,7 +47,14 @@ make test
 
 **4. Create a softlink for the NJOY2016 executable in the `EXSAN/working` subdirectory and name it `njoy`.**
 
-E.g. `ln -s Path_to_NJOY/NJOY2016/bin/njoy working/njoy`
+For example:
+```
+cd EXSAN/working
+ln -s Path_to_NJOY/NJOY2016/bin/njoy njoy
+```
+
+### Tutorial
+After you have NJOY installed and link, this [tutorial](https://docs.google.com/presentation/d/1P2XkV6NQazMvSrXv0gHJSfl8rgEkq9fNbID7oCnMgA8/edit?usp=sharing) will walk you through how to use the main features of EXSAN.
 
 ### Caveats
 EXSAN has been tested on Mac OSX 10.11 and higher. It has **not** yet been tested on any other operating systems!
