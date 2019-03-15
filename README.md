@@ -17,7 +17,7 @@ EXSAN is written in Python 2.7, and requires the [Python (2.7) Anaconda distribu
 
 **2. Add Anaconda to your path**
 
-After Anaconda installation, make sure that Anaconda is pre-pended to your path. On Mac OSX, this can be done with by typing the following command in the terminal, and/or adding it to your `$HOME/.bash_profile` file:
+After Anaconda installation, make sure that Anaconda is pre-pended to your path. On Mac OSX, this can be done by typing the following command in the terminal, and/or adding it to your `$HOME/.bash_profile` file:
 
 `export PATH="$HOME/anaconda2/bin:$PATH"`
 
@@ -54,7 +54,7 @@ ln -s Path_to_NJOY/NJOY2016/bin/njoy njoy
 ```
 
 ### Tutorial
-After you have NJOY installed and link, this [tutorial](https://docs.google.com/presentation/d/1P2XkV6NQazMvSrXv0gHJSfl8rgEkq9fNbID7oCnMgA8/edit?usp=sharing) will walk you through how to use the main features of EXSAN.
+After you have NJOY installed and linked, this [tutorial](https://docs.google.com/presentation/d/1P2XkV6NQazMvSrXv0gHJSfl8rgEkq9fNbID7oCnMgA8/edit?usp=sharing) will walk you through how to use the main features of EXSAN.
 
 ### Caveats
 EXSAN has been tested on Mac OSX 10.11 and higher. It has **not** yet been tested on any other operating systems!
