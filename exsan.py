@@ -36,19 +36,25 @@ import numpy as np
 import sys, os, operator
 from glob import glob
 from datadic import *
-import urllib, urllib2, lxml.html
+import urllib, urllib2
 import re
 from scipy.interpolate import CubicSpline as cs
 import time
+from copy import copy
 from pdb import set_trace as st
 from pylab import connect, draw
+from collections import OrderedDict as od
+from argparse import ArgumentParser
 
-# Global control variables
-verbose = False     # invoke print statements for debugging
-demo    = False      # for demo purposes (i.e. speed), do not download large tar files
-auto    = True
+opt = ArgumentParser(usage='python exsan.py [options]')
+opt.add_argument('-n',  '--njoy', dest='njoyPath',  help='Absolute path to NJOY2016')
+opt.add_argument('-b',  '--batch', dest='batchFile',  help='batch input file')
+opt.add_argument('-v',   '--verbose', action='store_true', help='verbosity')
+opt.add_argument('-d', '--demo', action='store_true', help='demo mode')
+opt.add_argument('-a', '--auto', action='store_true', help='minimal automation when starting up')
+options = opt.parse_args()
+
 demoIsotopes = ['H-1 total','Li-6 total']
-
 os.system('clear')
 
 #===========================================================
@@ -126,14 +132,13 @@ class makePeriodicTableButton(object):
     '''
     This class makes a cascading Menubutton of element > isotopes > MT cross sections.
     '''
-    def __init__(self, el, frame, elementsIsotopesDict, periodicTableDict, isotopesMTdict, flag_pOrM=False ):
-        self.el = el
-        self.frame = frame
-        self.elementsIsotopesDict = elementsIsotopesDict
-        self.periodicTableDict = periodicTableDict
-        self.isotopesMTdict = isotopesMTdict
-        self.flag_pOrM = flag_pOrM # flag point or multigroup
+    def __init__(self, el, frame, elementsIsotopesDict, periodicTableDict, isotopesMTdict, decayFlag, fileDir, flag_pOrM=False ):
+        for k,v in locals().iteritems():
+            if k != 'self':
+                setattr(self, k, v)
+
         self.allFlag =[False, True]
+
         self.makeComplexButton()
 
     def makeComplexButton(self):
@@ -153,11 +158,15 @@ class makePeriodicTableButton(object):
             for mtItem in self.isotopesMTdict[iso]:
                 oneList = []
                 oneList.append(iso+' '+mtItem)
-                iso_menu.add_command(label=mtItem,command=lambda oneList=oneList:getInfo2(oneList, self.flag_pOrM, self.allFlag[0]))
-                allList.append(iso+' '+mtItem)
-                allListMaster[iso].append(iso+' '+mtItem)
-                allListMasterMaster[self.el][iso].append(iso+' '+mtItem)
-            iso_menu.add_command(label='All',command=lambda allList=allList:getInfo2(allList, self.flag_pOrM, self.allFlag[1]))
+                if self.decayFlag:
+                    iso_menu.add_command(label=mtItem, command=lambda iso=iso, fileDir=self.fileDir: get_decay_data(iso, fileDir))
+                else:
+                    iso_menu.add_command(label=mtItem,command=lambda oneList=oneList:getInfo2(oneList, self.flag_pOrM, self.allFlag[0]))
+                    allList.append(iso+' '+mtItem)
+                    allListMaster[iso].append(iso+' '+mtItem)
+                    allListMasterMaster[self.el][iso].append(iso+' '+mtItem)
+            if not self.decayFlag:
+                iso_menu.add_command(label='All',command=lambda allList=allList:getInfo2(allList, self.flag_pOrM, self.allFlag[1]))
             el_btn.menu.add_cascade(label=iso, menu=iso_menu)
         el_btn.grid(row=self.periodicTableDict[self.el][2], column=self.periodicTableDict[self.el][1])
         for x in range(19):
@@ -271,7 +280,7 @@ class SnapToCursor(object):
     H. Omar Wooten
     7/4/18
     """
-    def __init__(self, ax, data, fig, titles):
+    def __init__(self, ax, data, fig, titles, textXY, textLabel):
         self.ax = ax
         self.lx = ax.axhline(color='k')  # the horiz line
         self.ly = ax.axvline(color='k')  # the vert line
@@ -279,7 +288,10 @@ class SnapToCursor(object):
         self.x = []
         for d in self.data:
             self.x.append(d[0])
-        self.txt = ax.text(0.65, 0.9, '', transform=ax.transAxes)
+        self.textXY = textXY
+        self.textLabel = textLabel
+        self.txt = ax.text(self.textXY[0], self.textXY[1], '', transform=ax.transAxes)
+        # self.txt = ax.text(0.65, 0.9, '', transform=ax.transAxes)
         self.txt.set_bbox(dict(facecolor='white', alpha=0.9, edgecolor='black'))
         self.fig = fig
         self.titles = titles
@@ -302,7 +314,7 @@ class SnapToCursor(object):
         # update the line positions
         self.lx.set_ydata(y)
         self.ly.set_xdata(x)
-        self.txt.set_text('%s: \neV: %.3e\nxs: %.3e'%(self.titles[indy], x, y))
+        self.txt.set_text('%s: \neV: %.3e\n%s: %.3e'%(self.titles[indy], x, self.textLabel, y))
         self.fig.draw()
 
 #===========================================================
@@ -369,9 +381,283 @@ def get_section_data(MF=3, MT=1):
 
 
 #===========================================================
+#    Get radioactive decay data
+#===========================================================
+def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
+    '''
+    Parse ENDF decay files.
+
+    Reference:
+    A. Trkov, D. A. Brown, "ENDF-6 Formats Manual: Data Formats and Procedures for the Evaluated Nuclear Data Files ENDF/B-VI, ENDF/B-VII and ENDF/B-VIII," BNL-203218-2018-INRE, Brookhaven National Laboratory, 2018.
+    '''
+
+    def parseLine(line):
+        '''
+        Parse a line of 6*11 characters, [:66], of an ENDF tape converting words with +/- to floats, and everything else as integers. Return the list of 6 items.
+        '''
+        line = line[:66]
+        # If a number is negative, Don't replace its '-' sign
+        if ' -' in line:
+            line = line.replace(' -','zz')
+        line = ''.join(list(line.replace('-','e-').replace('+','e+').replace('zz',' -'))).split()
+        return [float(h) if '+' in h or '-' in h else int(h) for h in line]
+
+    def parseLineIndices(line, indices=None):
+        '''
+        Parse a line of 6*11 characters, [:66], and return specific indices of the 6-item list.
+        '''
+        if indices == None:
+            indices = [i for i in range(6)]
+        return [parseLine(line)[x] for x in indices]
+
+    def resetDecay():
+        '''
+        Reset dictionary keys to blank lists
+        '''
+        decay['rtyp2'],  \
+        decay['er'],     \
+        decay['d_er'],   \
+        decay['type'],   \
+        decay['ri'],     \
+        decay['d_ri'],   \
+        decay['ris'],    \
+        decay['d_ris'],  \
+        decay['ricc'],   \
+        decay['d_ricc'], \
+        decay['rick'],   \
+        decay['d_rick'], \
+        decay['ricl'],   \
+        decay['d_ricl'], \
+         = ([] for i in range(14))
+
+    # decayTypes = {
+    #     0. : 'Gamma',
+    #     1. : 'Beta-',
+    #     2. : 'EC, Beta+',
+    #     4. : 'Alpha',
+    #     5. : 'Neutrons',
+    #     6. : 'SF',
+    #     7. : 'Protons',
+    #     8. : 'e- (Auger, conversion)',
+    #     9. : 'X-rays',
+    #     10.: 'e- anti-neutrinos',
+    #     11.: 'e- neutrinos'}
+
+
+    decayModes = copy(decayTypes)
+    decayModes[3.]= 'IT'
+
+
+    fileName = '%s/%s.txt'%(dir, ''.join(iso.split('-')))
+
+    with open(fileName, 'r') as f:
+        lines = f.readlines()
+
+
+    v = [l[70:75] for l in lines]
+    n = len(v)
+    mfmtstr = '%2s%3s' % (MF, MT)       # search string
+    iFirst=0
+    iFirst = v.index(mfmtstr)           # first occurrence of MT/MF section
+    iLast = n - v[::-1].index(mfmtstr)  # last occurrence of MT/MF section
+
+    data = []
+
+    decayAll = {}
+    decay = {}
+    decaySummary = {}
+
+    decayAll['avgDecayEnergy'], \
+    decayAll['rtyp'],  \
+    decayAll['rfs'],    \
+    decayAll['Q'],      \
+    decayAll['dQ'],     \
+    decayAll['br'],     \
+    decayAll['d_br'],   \
+    decay['rtyp2'],  \
+    decay['er'],     \
+    decay['d_er'],   \
+    decay['type'],   \
+    decay['ri'],     \
+    decay['d_ri'],   \
+    decay['ris'],    \
+    decay['d_ris'],  \
+    decay['ricc'],   \
+    decay['d_ricc'], \
+    decay['rick'],   \
+    decay['d_rick'], \
+    decay['ricl'],   \
+    decay['d_ricl'], \
+     = ([] for i in range(21))
+
+    decayAll['za'], decayAll['awr'], decayAll['nsp'] = parseLineIndices(lines[iFirst], [0,1,5])
+
+    decayAll['tHalf'], decayAll['nc'] = parseLineIndices(lines[iFirst+1], [0,4])
+    decayAll['nc'] = decayAll['nc']/2
+
+    if decayAll['nsp']==0. and decayAll['tHalf']==0:
+        mem.resultsText.delete('1.0', END)
+        mem.resultsText.insert(INSERT, '%s is stable.\n'%(iso))
+        return
+
+
+    if decayAll['nc'] == 3:
+        iStart, iEnd = iFirst+2, iFirst+3
+    else:
+        iStart, iEnd = iFirst+2, iFirst+12
+
+    for line in lines[iStart:iEnd]:
+        decayAll['avgDecayEnergy'] += parseLine(line)
+
+    decayAll['spin'], decayAll['par'], decayAll['nDecayModes'] = [parseLine(lines[iEnd])[x] for x in [0, 1, 5]]
+
+    # Loop over decay modes (NDK)
+    data = []
+    iStart = iEnd+1
+    for ndki in range(decayAll['nDecayModes']):
+        data += parseLine(lines[iStart+ndki])
+
+    iStart += ndki+1
+    decayAll['rtyp'] = [decayModes[x] for x in data[::6]]
+    decayAll['rfs'] = data[1::6]
+    decayAll['Q'] = data[2::6]
+    decayAll['d_Q'] = data[3::6]
+    decayAll['br'] = data[4::6]
+    decayAll['d_br'] = data[5::6]
+
+    # mem.decaySummary['ZA'] = [int(mem.decayAll['za'])]
+    decaySummary[u'T-\u00BD'] = [decayAll['tHalf']]
+    decaySummary['Decay Modes'] = zip(decayAll['rtyp'], decayAll['br'])
+
+
+    # Loop over spectra (NSP)
+    for nspi in range(decayAll['nsp']):
+        # resetDecay()
+        decay['styp'], \
+        decay['lcon'], \
+        decay['lcov'], \
+        decay['ner'] = parseLineIndices(lines[iStart], [1, 2, 3, 5])
+        decay['styp'] = decayTypes[decay['styp']]
+        iStart += 1
+
+        decay['fd'],     \
+        decay['d_fd'],   \
+        decay['erAv'],   \
+        decay['d_erAv'], \
+        decay['fc'],     \
+        decay['d_fc'] = parseLineIndices(lines[iStart])
+        iStart+=1
+
+        # Loop over discrete energies for a given spectral type (NER)
+        for neri in range(decay['ner']):
+            er, d_er, nt = parseLineIndices(lines[iStart], [0, 1, 4])
+            iStart += 1
+
+            rtyp2, type, ri, d_ri, ris, d_ris = parseLineIndices(lines[iStart])
+            # is there any way to do this in a loop? Like this?
+            # for i in [er, d_er]:
+            #     varName = [k for k,v in locals().iteritems() if v==i[0]]
+            #     mem.decay[varName].append(i)
+            decay['er'].append(er)
+            decay['d_er'].append(d_er)
+            decay['rtyp2'].append(rtyp2)
+            decay['type'].append(type)
+            decay['ri'].append(ri)
+            decay['d_ri'].append(d_ri)
+            decay['ris'].append(ris)
+            decay['d_ris'].append(d_ris)
+            iStart += 1
+
+            if nt > 6:
+                ricc, d_ricc, rick, d_rick, ricl, d_ricl = parseLineIndices(lines[iStart])
+                decay['ricc'].append(ricc)
+                decay['d_ricc'].append(d_ricc)
+                decay['rick'].append(ricc)
+                decay['d_rick'].append(ricc)
+                decay['ricl'].append(ricc)
+                decay['d_ricl'].append(ricc)
+                iStart += 1
+
+        radSummary = zip(decay['er'], decay['ri'])
+        radSummary.sort(key=lambda x: x[1])
+        decaySummary[decay['styp']] = radSummary
+
+        # if miniParse:
+        #     mem.decaySummaryIntensity[iso] = od()
+        #     mem.decaySummaryEnergy[iso]  =od()
+        #     decaySummary[u'T-\u00BD']
+        #
+        #     mem.decaySummaryIntensity[iso][decay['styp']] = radSummary[-1]
+        #     radSummary = zip(decay['er'], decay['ri'])
+        #     radSummary.sort(key=lambda x: x[0])
+        #     mem.decaySummaryEnergy[iso][decay['styp']] = radSummary[-1]
+        #     mem.decaySummaryEnergy[iso][u'T-\u00BD'] = decaySummary[u'T-\u00BD']
+        #     mem.decaySummaryEnergy[iso]['Decay Modes'] = decaySummary['Decay Modes']
+
+
+    if miniParse:
+        return decaySummary
+        # return mem.decaySummaryEnergy[iso], mem.decaySummaryIntensity[iso]
+
+
+    mem.resultsText.delete('1.0', END)
+    mem.resultsText.insert(INSERT, '     -- Radioactive Decay Summary: %s --\n\n'%(iso))
+
+    value, units = getDecayUnits(decaySummary[u'T-\u00BD'][0])
+    if value>1000:
+        mem.resultsText.insert(INSERT, u'%18s %10.3e %s\n\n'%(u'T-\u00BD:', value, units))
+    else:
+        mem.resultsText.insert(INSERT, u'%18s %10.3f %s\n\n'%(u'T-\u00BD:', value, units))
+
+    mem.resultsText.insert(INSERT, '='*50+'\n\n')
+    for k,v in decaySummary.iteritems():
+        if k==u'T-\u00BD': # already printing half life at the top of the summary
+            continue
+        mem.resultsText.insert(INSERT, '%s\n\n'%(k))
+        if k == 'Decay Modes':
+            for vi in v:
+                mem.resultsText.insert(INSERT,'%20s %14.4e \n'%(vi[0], vi[1]))
+            mem.resultsText.insert(INSERT, '\n'+'='*50+'\n\n')
+            continue
+
+
+        # convert half life from seconds to reasonable units
+        if k == u'T-\u00BD': # half life
+            for kk,vv in mem.halfLifeScale.iteritems():
+                if decaySummary[k][0] >= vv[0] and decaySummary[k][0] < vv[1]:
+                    if decaySummary[k][0] >3.15e11:
+                        mem.resultsText.insert(INSERT,'%20.4e %s\n\n'%(decaySummary[k][0]/vv[0], kk))
+                    else:
+                        if kk=='sec':
+                            mem.resultsText.insert(INSERT,'%20.4f %s\n\n'%(decaySummary[k][0], kk))
+                        else:
+                            mem.resultsText.insert(INSERT,'%20.4f %s\n\n'%(decaySummary[k][0]/vv[0], kk))
+                    mem.resultsText.insert(INSERT, '='*50+'\n\n')
+            continue
+
+
+        elif k in decayTypes.values():
+            mem.resultsText.insert(INSERT, '%20s %16s\n\n'%('E (eV)','Fraction'))
+
+        for vi in v:
+            try:
+                # print '%10.9e %10.9e'%(vi[0], vi[1])
+                mem.resultsText.insert(INSERT,'%21.4e %16.4e \n'%(vi[0], vi[1]))
+            except:
+                # print '%s'%(str(vi))
+                mem.resultsText.insert(INSERT, '\t%s\n'%(str(vi)))
+        # print '='*25
+        mem.resultsText.insert(INSERT, '\n'+'='*50+'\n')
+
+        mem.decaySummary = copy(decaySummary)
+        mem.decaySummary['isotope']=iso
+        mem.decayPlotButton['state'] = 'normal'
+
+
+#===========================================================
 #   Create a dictionary of MT/MF combinations from lines
 #===========================================================
-def make_dict():
+def make_dict(fileDir):
     v = [l[70:75] for l in mem.lines]
     MF = set([l[70:72].strip() for l in mem.lines])
     MT = [l[72:75].strip() for l in mem.lines]
@@ -393,7 +679,10 @@ def make_dict():
     if mem.particle.get()==1:
         range = '23'
     else:
-        range = '3'
+        if 'decay' in fileDir:
+            range = '8'
+        else:
+            range = '3'
 
     MT_verbose = []
     for item in MTMF_dict[range]:
@@ -434,10 +723,13 @@ def update_files(event=None):
     fileDirs = {}
     fileDirs[fileDirectory] = mem.tab11
     fileDirs[fileDirectory+'/multigroup'] = mem.tab12
+    fileDirs['/'.join(fileDirectory.split('/')[:-1])+'/decay'] = mem.tab13
     mem.allListMaster = {}
     mem.allListMasterMaster = {}
 
     for mem.fileDir, tab in fileDirs.iteritems():
+        decayFlag = True if 'decay' in mem.fileDir else False
+
         mem.files = glob('./'+mem.fileDir+'/*.txt')
         isotopesTmp = [f.split('/')[-1].split('.txt')[0] for f in mem.files]
         mem.elements = []
@@ -476,7 +768,7 @@ def update_files(event=None):
             mem.files.remove(file)
 
         for file in mem.files:
-            if verbose:
+            if options.verbose:
                 print 'Reading %s'%file
             popup.update()
             a = file.split('/')[-1].split('.')[0]
@@ -484,7 +776,8 @@ def update_files(event=None):
             if len(b) > 1:
                 mem.elements.append(b[0])
                 if len(b) > 2:
-                    c = b[0]+'-'+b[1]+b[2]
+                    # c = b[0]+'-'+b[1]+b[2]
+                    c = b[0]+'-'+''.join(b[1:-1])
                 else:
                     c = b[0]+'-'+b[1]
             else:
@@ -498,12 +791,12 @@ def update_files(event=None):
 
             # if there is an error with an NJOY processed file, keep going
             try:
-                reactions = make_dict()
+                reactions = make_dict(mem.fileDir)
                 mem.isotopesMTdict[c] = reactions
             except:
                 continue
 
-            if not mem.fileDir == 'endfvii-atomic':
+            if not (mem.fileDir == 'endfvii-atomic' or 'decay' in mem.fileDir):
                 mem.isotopesMTdict[c].append('absorption')
 
             # create local dictionary of reactions and isotopes containing that reaction. For quicker rank-order analysis
@@ -537,11 +830,12 @@ def update_files(event=None):
             flag_pOrM = True
         else:
             flag_pOrM = False
+
         for element in mem.elements:
             # if there's an error while making a periodic table button, keep going
             try:
                 btn = makePeriodicTableButton(element, tab, \
-                  mem.elementsIsotopesDict, periodicTableDict, mem.isotopesMTdict, flag_pOrM)
+                  mem.elementsIsotopesDict, periodicTableDict, mem.isotopesMTdict, decayFlag, mem.fileDir, flag_pOrM)
             except:
                 continue
         popup.destroy()
@@ -957,7 +1251,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
 
     # snap
     if mem.Cursor_var.get() and not allFlag:
-        cursor = SnapToCursor(ax1, snapData, fig.canvas, plotOrder)
+        cursor = SnapToCursor(ax1, snapData, fig.canvas, plotOrder, (0.65, 0.9), 'xs')
         pl.connect('motion_notify_event', cursor.mouse_move)
 
 
@@ -969,6 +1263,80 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
         pdf.close()
     else:
         pl.show()
+
+
+def plotDecay():
+    '''
+    This function will plot decay data
+    '''
+    ps = 3. # scale plot markers by this value
+    pDict = {
+        'Gamma': ['*', 150*ps, 0.5, 'r'],
+        'X-rays': ['x', 40*ps, 0.8, 'k'],
+        'Beta-': ['<', 90*ps, 0.5, 'b'],
+        'EC, Beta+': ['o', 60*ps, 0.5, 'y'],
+        'Alpha':  ['o', 100*ps, 0.5, 'g'],
+        'Neutrons': ['>', 100*ps, 0.5, 'm'],
+        'SF' : ['1', 100*ps*ps, 0.5, 'orange'],
+        'Protons' : ['+', 100, 0.5, 'navy'],
+        'e- (Auger, conversion)': ['o', 20*ps, 0.5, 'orange'],
+        'e- anti-neutrinos': ['|', 60*ps, 0.5, 'violet'],
+        'e- neutrinos': ['-', 60*ps, 0.5, 'slategray']}
+
+    # pl.cla()
+    fig = pl.figure('Radioactive Decay', figsize=(12,8))
+    ax = fig.add_subplot(111)
+    ax.set_axisbelow(True)
+
+    i = 0
+    pl.xscale('log')
+    pl.yscale('log')
+    ms = 70
+    snapData = []
+    titles = []
+    minX, maxX, minY, maxY = ([] for i in range(4))
+    for k,v in mem.decaySummary.iteritems():
+        if k in ['Half Life', 'Decay Modes', u'T-\xbd','isotope']:
+            continue
+        xData = [vi[0] for vi in v]
+        yData = [vi[1] for vi in v]
+        minX.append(min(xData))
+        minY.append(min(yData))
+        maxX.append(max(xData))
+        maxY.append(max(yData))
+        snapData.append((xData, yData))
+        titles.append(k)
+        colorIdx = i%len(mem.c)
+        c = mem.c[colorIdx]
+        pl.scatter(xData, yData, marker=pDict[k][0], s=pDict[k][1], alpha=pDict[k][2], facecolors=pDict[k][3], edgecolors='k', label=k)
+
+        i += 1
+
+    val, unit = getDecayUnits(mem.decaySummary[u'T-\xbd'][0])
+    fs = 20
+    fw = 'bold'
+    pl.legend(loc=3, fontsize=fs-4)
+    if val>1000:
+        pl.title(u'%s\nT-\xbd = %.3e %s'%(mem.decaySummary['isotope'], val, unit), fontsize=fs, fontweight=fw)
+    else:
+        pl.title(u'%s\nT-\xbd = %.3f %s'%(mem.decaySummary['isotope'], val, unit), fontsize=fs, fontweight=fw)
+    pl.xlabel('Energy (eV)', fontsize=fs-4)
+    pl.ylabel('Probability per decay', fontsize=fs-4)
+    ax.set_xlim([0.1*min(minX), 6*max(maxX)])
+    ax.set_ylim([0.1*min(minY), 6*max(maxY)])
+    pl.grid(which='both', linestyle='--',color='0.9')
+
+    if mem.Cursor_var.get():
+        cursor = SnapToCursor(ax, snapData, fig.canvas, titles, (0.1, 0.9), 'prob')
+        pl.connect('motion_notify_event', cursor.mouse_move)
+
+    pl.show()
+
+
+
+
+
+
 
 #===========================================================
 #  This function unzips NNDCD ENDF files, and extracts each
@@ -993,12 +1361,12 @@ def nndcParse(ver):
         subdir = '/'.join(name.split('/')[:3])
         newName = name.split('/')[-1]
         el = newName.split('_')[1]
-        iso = newName.split('_')[-1][:3].lstrip('0')
-        if 'neutrons' in name:
+        iso = newName.split('_')[-1].split('.')[0].lstrip('0')
+        if 'neutrons' or 'decay' in name:
             os.system('mv %s %s/%s%s.txt'%(name,subdir,el,iso))
         else:
             os.system('mv %s %s/%snat.txt'%(name,subdir,el))
-            return
+        return
 
     # slimmed down version of periodTableDict
     newDict = {}
@@ -1036,7 +1404,7 @@ def nndcParse(ver):
                     isotopesAll.append(isotope)
                     tally+=1
 
-                    if verbose: print file, isotope
+                    if options.verbose: print file, isotope
 
                     verDir = ver.replace('/','_').replace('-','_')
                     if not os.path.isdir(verDir+'/parsed'):
@@ -1107,7 +1475,7 @@ def addMe(*args):
                 if not os.path.isdir(kDir):
                     sp.check_call(['mkdir', kDir])
 
-                if not demo:
+                if not options.demo:
                     # download tar file from NNDC
                     print 'downloading %s data file from\n %s\n'%(k,nndcDict[k][0])
                     start = time.time()
@@ -1118,10 +1486,15 @@ def addMe(*args):
                 # untar the file in its respective fileDirectory
                 sp.check_call(['tar','-xvf', '/'.join([kDir, dest]), '-C',kDir+'/'])
                 print k,'has been dowloaded. Post-processing in progress...'
+                mem.logText.insert(INSERT, '\n%s has been dowloaded. Post-processing in progress...\n'%k)
                 nndcParse(k)
                 print k,'has been successfully post-processed.'
+                mem.logText.insert(INSERT, '\n%s has been successfully post-processed.\n'%k)
+
             else:
                 print k,'cannot be downloaed from NNDC at this time.'
+                mem.logText.insert(INSERT, '\n%s has been successfully post-processed.\n'%k)
+
 
 
 
@@ -1185,30 +1558,35 @@ def master_list(tab):
     mem.mixDict = {}
 
 
-
     print 'Searching for isotopes with '+mem.Select_MT.get()+' reaction...'
 #     logText.insert(INSERT,'Searching for isotopes with '+Select_MT.get()+' reaction...\n')
 
     mem.preCheckedFiles=[]
     if mem.Select_MT.get() == 'absorption':
         absFlag = True
+
+    if mem.Select_MT.get() == 'radioactive_decay':
+        mem.note1.select(2)
+
     if mem.note0.index(mem.note0.select()) == 1:
         whichTab = mem.note1.index(1)
+
     else:
         whichTab = mem.note1.index("current")
 
     popup = Toplevel()
-    popup_lab2 = Label(popup, text='Analyzing isotopes with '+mem.Select_MT.get()+' reaction', width=50)
+    popupText = StringVar()
+    popupText.set('Analyzing isotopes with %s reaction'%mem.Select_MT.get())
+    popup_lab2 = Label(popup, textvariable=popupText, width=50)
     status2 = 0
     status_var2 = DoubleVar()
     progress_bar2 = ttk.Progressbar(popup, variable=status_var2, maximum=100)
     try:
         statusInc1 = 100.0/len(mem.fileDict_all[whichTab].keys())
-        popup_lab2.grid(row=2, column=0)
-        progress_bar2.grid(row=3, column=0, sticky=EW)#.pack(fill=tk.X, expand=1, side=tk.BOTTOM)
+        popup_lab2.grid(row=0, column=0)
+        progress_bar2.grid(row=1, column=0, sticky=EW)
     except:
         pass
-
 
     mem.preCheckedFiles = []
     for i in mem.reactionsDict[mem.periodicTableTabs[whichTab][0]][mem.Select_MT.get()]:
@@ -1224,44 +1602,76 @@ def master_list(tab):
     except:
         popup_lab2 = Label(popup, text='Select ENDF library (with multigroup data) first', width=50)
         popup_lab2.grid(row=0, column=0)
-        # popup.update()
+        popup.update()
         return
 
     for i, file in enumerate(mem.preCheckedFiles):
-        popup_lab2 = Label(popup, text='Analyzing file '+str(i+1)+'/'+str(len(mem.preCheckedFiles))+' with '+mem.Select_MT.get()+' reaction.', width=50)
-        popup_lab2.grid(row=2, column=0)
+        start = time.time()
+        popupText.set('Analyzing file %i/%i with %s'%(i+1, len(mem.preCheckedFiles),mem.Select_MT.get()))
+        # popup_lab2 = Label(popup, text='Analyzing file '+str(i+1)+'/'+str(len(mem.preCheckedFiles))+' with '+mem.Select_MT.get()+' reaction.', width=50)
+        # popup_lab2.grid(row=2, column=0)
         popup.update()
-        tally+=1
-        status+=1
-
-        f=open(file)
+        # tally+=1
+        # status+=1
+        # end = time.time()
         isotope = mem.fileDict_all[whichTab][file]
         mem.element = isotope.split('-')[0]
-        mem.lines = f.readlines()
+        # This is probably a good place to call another function that assimilates all of the radioactive decay data into a large data structure
+        if mem.Select_MT.get() == 'radioactive_decay':
+            if mem.decayOpt['state'] == 'disabled':
+                mem.decayOpt['state'] = 'normal'
+                mem.decaySortName['state'] = 'normal'
+                mem.decaySortEnergy['state'] = 'normal'
+                mem.decaySortOccurrence['state'] = 'normal'
+                mem.decay_analysis_opt.set(sorted(mem.decayTypeDict.keys())[0])
+            dirTmp = '/'.join(file.split('/')[:-1])
+            try:
+                decaySummary = get_decay_data(isotope, dirTmp, miniParse=True)
+                mem.tHalfDict[isotope] = decaySummary[u'T-\xbd'][0]
+                mem.decayModeDict[isotope] = decaySummary['Decay Modes']
+                del decaySummary['Decay Modes']
+                del decaySummary[u'T-\xbd']
 
-        if mem.lines[1].split()[4] == '-1':
-            if mem.Select_MT.get() =='absorption':
-                 gTot = makeMultiGroup(mem.lines, 3,1)
-                 gSca = makeMultiGroup(mem.lines, 3,2)
-                 x = np.array(gTot.eBins_n)
-                 y = np.array(gTot.xs) - np.array(gSca.xs)
-
-            else:
-                 g = makeMultiGroup(mem.lines, 3,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
-                 x = np.array(g.eBins_n)
-                 y = np.array(g.xs)
+                # assemble all of the decay data
+                for k,v in mem.decayTypeDict.iteritems():
+                    try:
+                        # each key (isotope) = most probable particle energy
+                        v[isotope] = sorted(decaySummary[k], key=lambda x: x[1])[-1]
+                    except:
+                        pass
+            except:
+                pass
+            status2 += statusInc2
+            status_var2.set(status2)
+            continue
 
         else:
-            if absFlag:    # compute absorption as total-scatter
-                x1,yTot = get_section_data(3,1)
-                x1,ySca = get_section_data(3,2)
-                x=np.array(x1)
-                y=np.array(yTot)-np.array(ySca)
+            with open(file, 'r') as f:
+                lines = f.readlines()
 
-            elif mem.particle.get()==1:
-                x,y = get_section_data(23,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
+            if lines[1].split()[4] == '-1':
+                if mem.Select_MT.get() =='absorption':
+                     gTot = makeMultiGroup(lines, 3,1)
+                     gSca = makeMultiGroup(lines, 3,2)
+                     x = np.array(gTot.eBins_n)
+                     y = np.array(gTot.xs) - np.array(gSca.xs)
+
+                else:
+                     g = makeMultiGroup(lines, 3,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
+                     x = np.array(g.eBins_n)
+                     y = np.array(g.xs)
+
             else:
-                x,y = get_section_data(3,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
+                if absFlag:    # compute absorption as total-scatter
+                    x1,yTot = get_section_data(3,1)
+                    x1,ySca = get_section_data(3,2)
+                    x=np.array(x1)
+                    y=np.array(yTot)-np.array(ySca)
+
+                elif mem.particle.get()==1:
+                    x,y = get_section_data(23,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
+                else:
+                    x,y = get_section_data(3,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
 
         x = np.array(x)
         y = np.array(y)
@@ -1334,40 +1744,86 @@ def master_list(tab):
         status2 += statusInc2
         status_var2.set(status2)
 
+    mem.decayTypeDict['Half Life'] = mem.tHalfDict
     popup.destroy()
     mem.logText.insert(INSERT, 'Analysis complete.\n')
+
+    analysisType = 'decay' if mem.Select_MT.get() == 'radioactive_decay' else 'xs'
     displayAnalysis()
 
+def getDecayUnits(d):
+    for k,v in mem.halfLifeScale.iteritems():
+        if d >= v[0] and d < v[1]:
+            if k == 'sec':
+                return d, k
+            else:
+                return d/v[0], k
 
-def displayAnalysis():
 
+
+
+def displayAnalysis(event=None):
     def dictToArray(dict,num):
         a = sorted(dict.items(), key=operator.itemgetter(num))
         a = np.array(a)
         return a
 
+    def dictToTuples(dict):
+        tuples = []
+        for k,v in dict.iteritems():
+            if type(v) == float:
+                tuples.append((k, v))
+            elif len(v) == 2:
+                tuples.append((k, v[0], v[1]))
+        return tuples
 
-    xs_list = [mem.thermalDict, mem.fissionDict, mem.fusionDict, mem.eUserDict]
-    xs_listS = ['thermalDictSorted', 'fissionDictSorted', 'fusionDictSorted', 'eUserDictSorted']
-    e_list  = ['thermal', 'fiss', 'fus', 'user']
-
-    mem.resultsToPrint = dictToArray(xs_list[mem.eRange.get()], mem.sortBy.get())
-
-    mem.resultsText.delete('1.0', END)
-    if mem.microMacro.get() == 1:
-        mem.resultsText.insert(INSERT, u"Isotope         \u03a3(1/cm)\n")
-    elif mem.microMacro.get() == 2:
-        mem.resultsText.insert(INSERT, u"Isotope         Mean_Free_Path(cm)\n")
-    elif mem.microMacro.get() == 3:
-        mem.resultsText.insert(INSERT, u"Isotope         \u03a3/\u03c1(cm^2/g)\n")
-    else:
-        mem.resultsText.insert(INSERT, u"Isotope         \u03c3(barns)\n")
-
-    for i in range(len(mem.resultsToPrint)):
-        if isinstance(mem.resultsToPrint[i,1], basestring):
-            mem.resultsText.insert(INSERT, '%3i %-10s %8.4e\n' %(i+1, mem.resultsToPrint[i,0],float(mem.resultsToPrint[i,1]))) #'%2s%3s' % (MF, MT)
+    if mem.Select_MT.get() == 'radioactive_decay':
+        if mem.decay_analysis_opt.get()=='Half Life':
+            mem.decaySortEnergy['text'] = u'T-\xbd'
+            mem.decaySortOccurrence.configure(state='disabled')
         else:
-            mem.resultsText.insert(INSERT, '%3i %-10s %8.4e\n' %(i+1, mem.resultsToPrint[i,0],float(mem.resultsToPrint[i,1]))) #'%2s%3s' % (MF, MT)
+            mem.decaySortEnergy['text'] = 'Energy'
+            mem.decaySortOccurrence.configure(state='normal')
+
+        results = sorted(dictToTuples(mem.decayTypeDict[mem.decay_analysis_opt.get()]), key=lambda x: x[mem.decaySort.get()])
+        mem.resultsText.delete('1.0', END)
+        if len(results[0]) == 2:
+            mem.resultsText.insert(INSERT, u'%15s %15s\n\n'%('Isotope',u'T-\xbd'))
+        elif len(results[0]) == 3:
+            mem.resultsText.insert(INSERT, '%15s %15s %15s\n\n'%('Isotope','E (eV)', 'Fraction'))
+        for i, r in enumerate(results, start=1):
+            if len(r) == 2:
+                value, unit = getDecayUnits(r[1])
+                if value >=1000. and unit=='years':
+                    mem.resultsText.insert(INSERT, '%4i %10s %15.3e %8s\n'%(i, r[0], value, unit))
+                else:
+                    mem.resultsText.insert(INSERT, '%4i %10s %15.3f %8s\n'%(i, r[0], value, unit))
+            if len(r) == 3:
+                mem.resultsText.insert(INSERT, '%4i %10s %15.3e %15.3e\n'%(i, r[0], r[1], r[2]))
+
+
+    if mem.Select_MT.get() == 'xs':
+        xs_list = [mem.thermalDict, mem.fissionDict, mem.fusionDict, mem.eUserDict]
+        xs_listS = ['thermalDictSorted', 'fissionDictSorted', 'fusionDictSorted', 'eUserDictSorted']
+        e_list  = ['thermal', 'fiss', 'fus', 'user']
+
+        mem.resultsToPrint = dictToArray(xs_list[mem.eRange.get()], mem.sortBy.get())
+
+        mem.resultsText.delete('1.0', END)
+        if mem.microMacro.get() == 1:
+            mem.resultsText.insert(INSERT, u"Isotope         \u03a3(1/cm)\n")
+        elif mem.microMacro.get() == 2:
+            mem.resultsText.insert(INSERT, u"Isotope         Mean_Free_Path(cm)\n")
+        elif mem.microMacro.get() == 3:
+            mem.resultsText.insert(INSERT, u"Isotope         \u03a3/\u03c1(cm^2/g)\n")
+        else:
+            mem.resultsText.insert(INSERT, u"Isotope         \u03c3(barns)\n")
+
+        for i in range(len(mem.resultsToPrint)):
+            if isinstance(mem.resultsToPrint[i,1], basestring):
+                mem.resultsText.insert(INSERT, '%3i %-10s %8.4e\n' %(i+1, mem.resultsToPrint[i,0],float(mem.resultsToPrint[i,1]))) #'%2s%3s' % (MF, MT)
+            else:
+                mem.resultsText.insert(INSERT, '%3i %-10s %8.4e\n' %(i+1, mem.resultsToPrint[i,0],float(mem.resultsToPrint[i,1]))) #'%2s%3s' % (MF, MT)
 
 #===========================================================
 #   Process all raw ENDF files with NJOY
@@ -1437,7 +1893,7 @@ def run_njoy(*args):
                 os.mkdir('./'+newValue+'/multigroup')
             files = glob(checkDir)
             for file in files:
-                if verbose: print 'NJOY working on %s'%(file)
+                if options.verbose: print 'NJOY working on %s'%(file)
                 NJOY(file)
 
             os.system('mv ./working/*.txt '+myDir)
@@ -1523,6 +1979,8 @@ def clearAll(event=None):
     mem.logText.delete('1.0', END)
     mem.logText.insert(INSERT, 'Plots cleared \n')
     mem.batchFile = None
+    # mem.decaySummaryEnergy = od()
+    # mem.decaySummaryIntensity = od()
 
 def makeMixList(*args):
     master_list(mem.tab02)
@@ -1637,8 +2095,9 @@ def initializeVariables():
     mem.MTMF_dict={}
     mem.fileDict_p = {} # fileDict for pointwise files
     mem.fileDict_m = {} # fileDict for multigroup fileDirs
+    mem.fileDict_decay = {} # fileDict for multigroup fileDirs
     # list of fileDicts corresponding to tab1 (point), tab2 (multigroup)
-    mem.fileDict_all = [mem.fileDict_p, mem.fileDict_m]
+    mem.fileDict_all = [mem.fileDict_p, mem.fileDict_m, mem.fileDict_decay]
     mem.labels = ['MF','MT']
     mem.MTlist=['']
     mem.MFlist=['']
@@ -1681,6 +2140,47 @@ def initializeVariables():
     mem.c = ['b','r','g','y','m','orange','lightgreen','tan','grey','lightgrey','k']
     mem.reactionsDict={}
 
+    # decay radiation dicts
+    mem.tHalfDict = {}
+    mem.alphaDict = {}
+    mem.xrayDict = {}
+    mem.gammaDict = {}
+    mem.betaDict = {}
+    mem.neutronDict = {}
+    mem.sfDict = {}
+    mem.ecDict = {}
+    mem.protonDict = {}
+    mem.eDict = {}
+    mem.antiNeutrinoDict = {}
+    mem.neutrinoDict = {}
+    mem.decayModeDict = {}
+    mem.tHalfList = []
+    mem.alphaList = []
+    mem.xrayList = []
+    mem.gammaList = []
+
+    mem.decayTypeDict = {
+        'Gamma': mem.gammaDict,
+        'Beta-': mem.betaDict,
+        'EC, Beta+': mem.ecDict,
+        'Alpha': mem.alphaDict,
+        'Neutrons': mem.neutronDict,
+        'SF' : mem.sfDict,
+        'Protons' : mem.protonDict,
+        'e- (Auger, conversion)': mem.eDict,
+        'X-rays': mem.xrayDict,
+        'e- anti-neutrinos': mem.antiNeutrinoDict,
+        'e- neutrinos': mem.neutrinoDict}
+
+mem.halfLifeScale = {
+        'sec':[0., 60.],
+        'min':[60., 3600.],
+        'hrs':[3600., 86400.],
+        'days':[86400., 2.592e6],
+        'months':[2.592e6, 3.1536e7],
+        'years':[3.1536e7, 1.e99]}
+
+
 
 def makeWidgets(root):
     initializeVariables()
@@ -1694,6 +2194,7 @@ def makeWidgets(root):
     mem.note0 = ttk.Notebook(root, width=int(mem.rootWidth*0.6), height=mem.rootHeight)
     mem.tab01 = Frame(mem.note0)#, width=int(rootWidth*scale_root))
     mem.tab02 = Frame(mem.note0)#, width=int(rootWidth*scale_root))
+    mem.tab03 = Frame(mem.note0)#, width=int(rootWidth*scale_root))
     Grid.rowconfigure(mem.tab01, 0, weight=1)
     Grid.columnconfigure(mem.tab02, 0, weight=1)
     mem.tab01.columnconfigure(0, weight=1)
@@ -1721,22 +2222,27 @@ def makeWidgets(root):
     mem.note1 = ttk.Notebook(mem.isotopes_frame, width=int(mem.rootWidth*0.6), height=mem.rootHeight/mem.topFrameScale1)
     mem.tab11 = Frame(mem.note1)
     mem.tab12 = Frame(mem.note1)
+    mem.tab13 = Frame(mem.note1)
 
     # keep track of these tabs for later
-    mem.periodicTableTabs = [(mem.tab11,'Pointwise'), (mem.tab12,'Multigroup')]
+    mem.periodicTableTabs = [(mem.tab11,'Pointwise'), (mem.tab12,'Multigroup'), (mem.tab13,'Decay')]
 
     Grid.rowconfigure(mem.tab11, 0, weight=1)
     Grid.columnconfigure(mem.tab12, 0, weight=1)
     mem.tab11.columnconfigure(0, weight=1)
     mem.tab12.columnconfigure(0, weight=1)
+    mem.tab13.columnconfigure(0, weight=1)
     mem.tab11.grid(row=0, column=0, sticky=NSEW)
     mem.tab12.grid(row=0, column=0, sticky=NSEW)
+    mem.tab13.grid(row=0, column=0, sticky=NSEW)
     mem.isotopeGrid11 = Frame(mem.tab11)
     mem.isotopeGrid12 = Frame(mem.tab12)
+    mem.isotopeGrid13 = Frame(mem.tab13)
     mem.isotopeGrid11.grid(column=0, row=7, sticky=NSEW)
     mem.isotopeGrid11.grid(column=0, row=7, sticky=NSEW)
     mem.note1.add(mem.tab11,text='Pointwise')
     mem.note1.add(mem.tab12,text='Multigroup')
+    mem.note1.add(mem.tab13,text='Decay')
     mem.note1.pack(side='top', fill='both', expand=True)
     s = ttk.Style()
     s.configure('TNotebook.Tab', padding=(20, 8, 20, 0))
@@ -1746,10 +2252,11 @@ def makeWidgets(root):
     mem.userE_frame =  Frame(mem.user_frame,width=mem.rootWidth/2, height=50, pady=1)
     mem.userMT_frame =  Frame(mem.user_frame,width=mem.rootWidth/2, height=50, pady=1)
 
-    mem.sortBy_frame = Frame(mem.tab01, width=mem.rootWidth, height=50, pady=7, relief=GROOVE, borderwidth=2)
+    mem.sortBy_frame = Frame(mem.tab01, width=mem.rootWidth, height=50, pady=7)#, relief=GROOVE, borderwidth=2)
     mem.sortBy_frame.columnconfigure(0, weight=1)
-    mem.sortByXS_frame = Frame(mem.sortBy_frame, width=mem.rootWidth/2, height=50, padx=20)
-    mem.sortByE_frame = Frame(mem.sortBy_frame, width=mem.rootWidth/2, height=50, padx=20)
+    mem.sortByXS_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/6, height=52, padx=20, text='Sort analysis')
+    mem.sortByE_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/4, height=52, padx=20, text='Analysis energy')
+    mem.sortDecay_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/2.5, height=52, padx=20, text='Decay Analysis')
     # mem.mix_frame = Frame(mem.sortBy_frame, width= 200, height=50, padx=20)
 
     mem.dataText_frame = Frame(mem.tab01, width=mem.rootWidth/2, height=50, relief=GROOVE, borderwidth=2)
@@ -1784,9 +2291,15 @@ def makeWidgets(root):
     mem.user_frame.grid(row=2)
     mem.userE_frame.grid(row=0,column=0)
     mem.userMT_frame.grid(row=0,column=1)
-    mem.sortBy_frame.grid(row=3)
-    mem.sortByXS_frame.grid(row=0, column=0)
-    mem.sortByE_frame.grid(row=0, column=1)
+    mem.sortBy_frame.grid(row=3, sticky=NS)
+
+    mem.sortByXS_frame.grid(row=0, column=0, padx=3)
+    mem.sortByXS_frame.grid_propagate(0)
+    mem.sortByE_frame.grid(row=0, column=1, padx=3)
+    mem.sortByE_frame.grid_propagate(0)
+    mem.sortDecay_frame.grid(row=0, column=2, padx=3)
+    mem.sortDecay_frame.grid_propagate(0)
+
     mem.dataText_frame.grid(row=4, column=0, sticky=EW)
     mem.dataTextData_frame.grid(row=0,column=0, sticky=EW)
     mem.dataTextLog_frame.grid(row=0,column=1, sticky=EW)
@@ -1891,8 +2404,8 @@ def makeWidgets(root):
     mem.Cursor.grid(row=0, column=7)
 
     mem.sortBy = IntVar()
-    mem.sortByName = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=0,text='Sort by Isotope',command=displayAnalysis,font=mem.HDG1)
-    mem.sortByXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=1,text='Sort by x-sec',command=displayAnalysis,font=mem.HDG1)
+    mem.sortByName = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=0,text='by isotope',command=displayAnalysis,font=mem.HDG1)
+    mem.sortByXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=1,text='by value',command=displayAnalysis,font=mem.HDG1)
     mem.sortByName.grid(row=0,column=0)
     mem.sortByXS.grid(row=0,column=1)
 
@@ -1908,19 +2421,46 @@ def makeWidgets(root):
     mem.sortByName.select()
     mem.eRangeTh.select()
 
+    mem.decaySort = IntVar()
+    mem.decay_analysis_opt = StringVar()
+
+    mem.decayOpt = OptionMenu(mem.sortDecay_frame, mem.decay_analysis_opt, *sorted(mem.decayTypeDict.keys()+['Half Life']),command=displayAnalysis)
+
+    mem.decaySortName = Radiobutton(mem.sortDecay_frame,variable=mem.decaySort,value=0,text='Isotope',command=displayAnalysis,font=mem.HDG1)
+
+    mem.decaySortEnergy = Radiobutton(mem.sortDecay_frame,variable=mem.decaySort,value=1,text='Energy',command=displayAnalysis,font=mem.HDG1)
+
+    mem.decaySortOccurrence =    Radiobutton(mem.sortDecay_frame,variable=mem.decaySort,value=2,text='Freq',command=displayAnalysis,font=mem.HDG1)
+
+    mem.decayPlotButton = Button(mem.sortDecay_frame, text='Plot Decay', command=plotDecay)
+
+    mem.decayOpt.configure(width=10, state='disabled')
+    mem.decaySortName.configure(width=10, state='disabled')
+    mem.decaySortEnergy.configure(width=10, state='disabled')
+    mem.decaySortOccurrence.configure(width=10, state='disabled')
+    mem.decayPlotButton.configure(width=10, state='disabled')
+    mem.decayOpt.grid(row=0,column=0)
+    mem.decaySortName.grid(row=0,column=1)
+    mem.decaySortEnergy.grid(row=0,column=2)
+    mem.decaySortOccurrence.grid(row=0,column=3)
+    mem.decayPlotButton.grid(row=0, column=4)
+
+
     mem.mix = IntVar()
     mem.mixFrac = DoubleVar()
     mem.mixFrac.set(1.0)
 
-    mem.scrollbar1 = Scrollbar(mem.dataTextData_frame)
-    mem.resultsText = Text(mem.dataTextData_frame, height=20, bg='aliceblue',font=mem.DATA,yscrollcommand=mem.scrollbar1.set)
+    mem.resultsText = Text(mem.dataTextData_frame, height=20, bg='aliceblue', font=mem.DATA)
+    mem.scrollbar1 = Scrollbar(mem.dataTextData_frame, command=mem.resultsText.yview)
+    mem.resultsText.configure(yscrollcommand=mem.scrollbar1.set)
     mem.resultsText.grid(row=0, column=0,sticky=NSEW,padx=1)
     mem.scrollbar1.grid(row=0, column=1, sticky=NS)
 
-    mem.scrollbar2 = Scrollbar(mem.dataTextLog_frame)
-    mem.scrollbar2.grid(row=0, column=1, sticky=NS)
-    mem.logText = Text(mem.dataTextLog_frame, height=20, bg='aliceblue',font=mem.DATA,yscrollcommand=mem.scrollbar2.set)
+    mem.logText = Text(mem.dataTextLog_frame, height=20, bg='aliceblue',font=mem.DATA)
+    mem.scrollbar2 = Scrollbar(mem.dataTextLog_frame, command=mem.logText.yview)
+    mem.logText.configure(yscrollcommand=mem.scrollbar2.set)
     mem.logText.grid(row=0, column=0,sticky=NSEW,padx=1)
+    mem.scrollbar2.grid(row=0, column=1, sticky=NS)
 
 
     # tab 2 widgets
@@ -1956,11 +2496,13 @@ def makeWidgets(root):
         mem.typeRadio_btn.grid(row=2, column=i)
 
     # Launch batch mode if input file is provided
-    if len(sys.argv) > 1:
-        mem.batchFile = sys.argv[1]
+    if options.batchFile:
+        mem.batchFile = options.batchFile
         runBatch()
     else:
         mem.batchFile = None
+
+
 
 def runBatch():
     if mem.batchFile == None:
@@ -2062,13 +2604,24 @@ def runBatch():
         # clearAll()
 
 
+def linkNjoy():
+    if not os.path.isfile('./working/njoy') and not os.path.islink('./working/njoy'):
+        if not options.njoyPath:
+            print '\n***Note: NJOY2016 is required to process raw ENDF files'
+            print 'If you have an NJOY2016 executable, you can supply it'
+            print 'when launching EXSAN:\n\tpython exsan.py -n AbsolutePathToNJOY'
+        else:
+            os.symlink('%s/bin/njoy'%(options.njoyPath), 'working/njoy')
+            print 'NJOY soft link created'
+        return
+
 def main():
     print "                    _______  ______    _    _   _ "
     print "                   | ____\ \/ / ___|  / \  | \ | |"
     print "                   |  _|  \  /\___ \ / _ \ |  \| |"
     print "                   | |___ /  \ ___) / ___ \| |\  |"
-    print "                   |_____/_/\_\____/_/   \_\_| \_|\n"
-    print "-- The (E)NDF (C)ross (S)ection (An)alysis and visualization appication --\n"
+    print "                   |_____/_/\_\____/_/   \_\_| \_|"
+    print "\n-- The (E)NDF (C)ross (S)ection (An)alysis and visualization appication --\n"
     print "                             Created by:"
     print "                    H. Omar Wooten, PhD, DABR"
     print "                          hasani@lanl.gov"
@@ -2084,6 +2637,7 @@ def main():
     root.grid_columnconfigure(0, weight=1)
     root.grid_rowconfigure(0, weight=1)
 
+    linkNjoy()
     makeWidgets(root)
     fileChecker(root)
 
@@ -2095,7 +2649,7 @@ def main():
     root.bind('c',clearAll)
 
     # for testing, automatically load ENDF 8
-    if auto:
+    if options.auto:
         mem.verSelect.set(6)
         update_files()
         # getInfo2(demoIsotopes, False, False)

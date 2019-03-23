@@ -5,7 +5,7 @@ nndcDict = {'ENDF/B-II':['http://www.nndc.bnl.gov/endf/b2/endfb2.tar.gz','ENDF_B
              'ENDF/B-V':['http://www.nndc.bnl.gov/endf/b5/endfb5.tar.gz','ENDF_B_V/nt5*',3],
              'ENDF/B-VI.8':['http://www.nndc.bnl.gov/endf/b6.8/endfb6.tar.gz','ENDF_B_VI.8/tape.1*',4],
              'ENDF/B-VII.1':['https://ndclx4.bnl.gov/gf/download/frsrelease/138/2242/ENDF-B-VII.1.tar.gz','ENDF_B_VII.1/ENDF-B-VII.1/neutrons','ENDF_B_VII.1/ENDF-B-VII.1/photoat'],
-             'ENDF/B-VIII.0':['https://www.nndc.bnl.gov/endf/b8.0/zips/ENDF-B-VIII.0.zip','ENDF_B_VIII.0/ENDF-B-VIII.0/neutrons','ENDF_B_VIII.0/ENDF-B-VIII.0/photoat']}
+             'ENDF/B-VIII.0':['https://www.nndc.bnl.gov/endf/b8.0/zips/ENDF-B-VIII.0.zip','ENDF_B_VIII.0/ENDF-B-VIII.0/neutrons','ENDF_B_VIII.0/ENDF-B-VIII.0/photoat','ENDF_B_VIII.0/ENDF-B-VIII.0/decay']}
 
 dirDict   = {'ENDF/B-II':'ENDF_B_II/parsed',
              'ENDF/B-III':'ENDF_B_III/parsed',
@@ -24,7 +24,7 @@ dirDict2   = {'ENDF/B-II':['ENDF_B_II/parsed'],
              'ENDF/B-VI.8':['ENDF_B_VI.8/parsed'],
              'ENDF/B-VII.1':['ENDF_B_VII.1/ENDF-B-VII.1/neutrons','ENDF_B_VII.1/ENDF-B-VII.1/photoat'],
              # 'ENDF/B-VII.1':'ENDF_B_VII.1/ENDF-B-VII.1/photoat',
-             'ENDF/B-VIII.0':['ENDF_B_VIII.0/ENDF-B-VIII.0/neutrons','ENDF_B_VIII.0/ENDF-B-VIII.0/photoat']}
+             'ENDF/B-VIII.0':['ENDF_B_VIII.0/ENDF-B-VIII.0/neutrons','ENDF_B_VIII.0/ENDF-B-VIII.0/photoat', 'ENDF_B_VIII.0/ENDF-B-VIII.0/decay']}
              # 'ENDF/B-VIII.0':'ENDF_B_VIII.0/ENDF-B-VIII.0/photoat'}
 
 
@@ -161,6 +161,7 @@ mtdic2 = {
          '105':'(z,t)',
          '106':'(z,3He)',
          '107':'(z,a)',
+         '457':'radioactive_decay',
          '501':'xray_total',
          '502':'xray_coherent_scattering',
          '504':'xray_incoherent_scattering',
@@ -311,3 +312,16 @@ njoy_ign_dict = {
         'sand-iia 640-group structure'    :15,
         'vitamin-e 174-group structure'   :16,
         'vitamin-j 175-group structure'   :17}
+
+decayTypes = {
+    0. : 'Gamma',
+    1. : 'Beta-',
+    2. : 'EC, Beta+',
+    4. : 'Alpha',
+    5. : 'Neutrons',
+    6. : 'SF',
+    7. : 'Protons',
+    8. : 'e- (Auger, conversion)',
+    9. : 'X-rays',
+    10.: 'e- anti-neutrinos',
+    11.: 'e- neutrinos'}
