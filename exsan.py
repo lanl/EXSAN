@@ -2609,9 +2609,9 @@ def linkNjoy():
         if not options.njoyPath:
             print '\n***Note: NJOY2016 is required to process raw ENDF files'
             print 'If you have an NJOY2016 executable, you can supply it'
-            print 'when launching EXSAN:\n\tpython exsan.py -n AbsolutePathToNJOY'
+            print 'when launching EXSAN:\n\tpython exsan.py -n /Users/user/Desktop/NJOY2016/bin/njoy'
         else:
-            os.symlink('%s/bin/njoy'%(options.njoyPath), 'working/njoy')
+            os.symlink('%s'%(options.njoyPath), 'working/njoy')
             print 'NJOY soft link created'
         return
 
