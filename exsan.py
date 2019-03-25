@@ -1440,8 +1440,9 @@ def nndcParse(ver):
 #===========================================================
 #   These functions control the download select buttons
 #===========================================================
-def addMe(*args):
+def addMe(root, processOnly=False):
     import subprocess as sp
+    from shutil import move as mv
 
     def download(url,destination):
         f = urllib2.urlopen(url)
@@ -1465,13 +1466,49 @@ def addMe(*args):
                 timeRemaining = float(bytesRemaining)/(increment/(dt/60))
                 print '%i MB remaining (approx. %.1f minutes)'%(bytesRemaining, timeRemaining)
 
+    def setReDownload(i):
+        yesNo_var.set(i)
+        priorDownload.destroy()
 
+    yesNo_var = IntVar()
+    yesNo_var.set(1)
     for k in sorted(nndcDict.keys()):
         if mem.downloadList[k].get() == 1:
+            st()
             if urllib2.urlopen(nndcDict[k][0]).geturl() == nndcDict[k][0]:
 
                 kDir = k.replace('/','_').replace('-','_')
                 dest = nndcDict[k][0].split('/')[-1].replace('-','_')
+
+                if os.path.isdir(kDir) and not processOnly:
+                    priorDownload = Toplevel()
+                    priorDownload.geometry('+300+200')
+                    pdl_text1 = '%s has already been downloaded.\n Subdirectories include:\n'%(k)
+                    for i, dir in enumerate(dirDict2[k], start=1):
+                        if os.path.isdir(dir):
+                            pdl_text1+= '\t%i) %s\n'%(i, dir)
+                    pdl_text1+='Download and overwrite?'
+                    pdl_label1 = Label(priorDownload, text=pdl_text1, justify='left')
+                    pdl_label1.grid(row=0, column=0, columnspan=2)
+                    yes_btn = Button(priorDownload, text='Yes, download and overwrite', command = lambda dlVar = 1: setReDownload(dlVar))
+                    no_btn = Button(priorDownload, text='No, keep current downloaded library', command = lambda dlVar = 0: setReDownload(dlVar))
+                    yes_btn.grid(row=1, column=0)
+                    no_btn.grid(row=1, column=1)
+                    # wait for user feedback
+                    root.wait_window(priorDownload)
+
+                if processOnly:
+                    yesNo_var.set(1)
+                    tmp = nndcDict[k][0].split('/')[-1]
+                    mv('%s/%s'%(kDir, tmp),'.')
+
+                if yesNo_var.get() == 1:
+                    if os.path.isdir(kDir):
+                        sp.check_call(['rm','-rf', kDir])
+
+                elif yesNo_var.get() == 0:
+                    continue
+
                 if not os.path.isdir(kDir):
                     sp.check_call(['mkdir', kDir])
 
@@ -1480,7 +1517,10 @@ def addMe(*args):
                     print 'downloading %s data file from\n %s\n'%(k,nndcDict[k][0])
                     start = time.time()
                     # mem.urlFile.retrieve(nndcDict[k][0], '/'.join([kDir, dest]))
-                    download(nndcDict[k][0], '/'.join([kDir, dest]))
+                    if processOnly:
+                        mv(tmp, kDir)
+                    else:
+                        download(nndcDict[k][0], '/'.join([kDir, dest]))
                     end = time.time()
                     print '%s downloaded in %7.3f sec'%(dest,(end-start))
                 # untar the file in its respective fileDirectory
@@ -1828,7 +1868,11 @@ def displayAnalysis(event=None):
 #===========================================================
 #   Process all raw ENDF files with NJOY
 #===========================================================
-def run_njoy(*args):
+def run_njoy(root):
+
+    def setReprocess(i):
+        reprocess.set(i)
+        priorProcess.destroy()
 
     def NJOY(file):
         with open(file, 'r') as f:
@@ -1879,16 +1923,43 @@ def run_njoy(*args):
         os.system('pwd')
 
     processList = []
+    reprocess = IntVar()
+    reprocess.set(0)
+
     for key,value in mem.downloadList.iteritems():
         if value.get()==1 and key!='ver_xRay':
             processList.append(key)
     if not os.path.isdir('./working/multigroup'):
         os.mkdir('./working/multigroup')
+
     for value in processList:
         newValue = dirDict2[value][mem.particle.get()]
         checkDir = './'+newValue+'/*.txt'
         myDir = './'+newValue+'/'
+
+        if os.path.isdir('./'+newValue+'/multigroup'):
+            priorProcess = Toplevel()
+            priorProcess.geometry('+300+200')
+            pdl_text1 = '%s has already been processed with NJOY.\nProcess again and overwrite?'%(newValue)
+            pdl_label1 = Label(priorProcess, text=pdl_text1, justify='left')
+            pdl_label1.grid(row=0, column=0, columnspan=2)
+            yes_btn = Button(priorProcess, text='Yes, process and overwrite', command = lambda dlVar = 1: setReprocess(dlVar))
+            no_btn = Button(priorProcess, text='No, keep current NJOY-processed files', command = lambda dlVar = 0: setReprocess(dlVar))
+            yes_btn.grid(row=1, column=0)
+            no_btn.grid(row=1, column=1)
+            # wait for user feedback
+            root.wait_window(priorProcess)
+            if reprocess.get()==0:
+                continue
+
+        else:
+            reprocess.set(0)
+
+        if reprocess.get() ==1:
+            addMe(root, processOnly=True)
+
         if os.path.isdir('./'+newValue):
+
             if not os.path.isdir('./'+newValue+'/multigroup'):
                 os.mkdir('./'+newValue+'/multigroup')
             files = glob(checkDir)
@@ -1898,6 +1969,7 @@ def run_njoy(*args):
 
             os.system('mv ./working/*.txt '+myDir)
             os.system('mv ./working/multigroup/*.txt '+myDir+'/multigroup')
+            mem.logText.insert(INSERT, 'NJOY processing of %s complete\n\n'%(dirDict2[value]))
         else:
             pass
 
@@ -2314,9 +2386,9 @@ def makeWidgets(root):
     mem.selectAll_btn.grid(row=1, column=1)
     mem.reset = Button(mem.download_frame,text='Deselect All',command=reset,font=mem.HDG1)
     mem.reset.grid(row=1, column=2)
-    mem.get = Button(mem.download_frame,text='Download Now',command=addMe,font=mem.HDG1)
+    mem.get = Button(mem.download_frame,text='Download Now',command=lambda root=root: addMe(root),font=mem.HDG1)
     mem.get.grid(row=1, column=3)
-    mem.njoy = Button(mem.download_frame,text='Process with NJOY',command=run_njoy,font=mem.HDG1)
+    mem.njoy = Button(mem.download_frame,text='Process with NJOY',command=lambda root=root: run_njoy(root),font=mem.HDG1)
     mem.njoy.grid(row=1, column=4)
     mem.njoy_temp = DoubleVar()
     mem.njoy_temp.set(300.)

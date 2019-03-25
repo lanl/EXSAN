@@ -1,9 +1,9 @@
 # The official ENDF libraries are maintained at NNDC
-nndcDict = {'ENDF/B-II':['http://www.nndc.bnl.gov/endf/b2/endfb2.tar.gz','ENDF_B_II/bnlendfb2tape20*.txt',2],
-             'ENDF/B-III':['http://www.nndc.bnl.gov/endf/b3/endfb3.tar.gz','ENDF_B_III/bnlendfb3tape30*.txt',2],
-             'ENDF/B-IV': ['http://www.nndc.bnl.gov/endf/b4/endfb4.tar.gz','ENDF_B_IV/*.g',2],
-             'ENDF/B-V':['http://www.nndc.bnl.gov/endf/b5/endfb5.tar.gz','ENDF_B_V/nt5*',3],
-             'ENDF/B-VI.8':['http://www.nndc.bnl.gov/endf/b6.8/endfb6.tar.gz','ENDF_B_VI.8/tape.1*',4],
+nndcDict = {'ENDF/B-II':['https://www.nndc.bnl.gov/endf/b2/    endfb2.tar.gz','ENDF_B_II/bnlendfb2tape20*.txt',2],
+             'ENDF/B-III':['https://www.nndc.bnl.gov/endf/b3/endfb3.tar.gz','ENDF_B_III/bnlendfb3tape30*.txt',2],
+             'ENDF/B-IV': ['https://www.nndc.bnl.gov/endf/b4/endfb4.tar.gz','ENDF_B_IV/*.g',2],
+             'ENDF/B-V':['https://www.nndc.bnl.gov/endf/b5/endfb5.tar.gz','ENDF_B_V/nt5*',3],
+             'ENDF/B-VI.8':['https://www.nndc.bnl.gov/endf/b6.8/endfb6.tar.gz','ENDF_B_VI.8/tape.1*',4],
              'ENDF/B-VII.1':['https://ndclx4.bnl.gov/gf/download/frsrelease/138/2242/ENDF-B-VII.1.tar.gz','ENDF_B_VII.1/ENDF-B-VII.1/neutrons','ENDF_B_VII.1/ENDF-B-VII.1/photoat'],
              'ENDF/B-VIII.0':['https://www.nndc.bnl.gov/endf/b8.0/zips/ENDF-B-VIII.0.zip','ENDF_B_VIII.0/ENDF-B-VIII.0/neutrons','ENDF_B_VIII.0/ENDF-B-VIII.0/photoat','ENDF_B_VIII.0/ENDF-B-VIII.0/decay']}
 
