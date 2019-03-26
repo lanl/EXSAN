@@ -1474,7 +1474,6 @@ def addMe(root, processOnly=False):
     yesNo_var.set(1)
     for k in sorted(nndcDict.keys()):
         if mem.downloadList[k].get() == 1:
-            st()
             if urllib2.urlopen(nndcDict[k][0]).geturl() == nndcDict[k][0]:
 
                 kDir = k.replace('/','_').replace('-','_')
