@@ -1686,17 +1686,17 @@ def master_list(tab):
 
         else:
             with open(file, 'r') as f:
-                lines = f.readlines()
+                mem.lines = f.readlines()
 
-            if lines[1].split()[4] == '-1':
+            if mem.lines[1].split()[4] == '-1':
                 if mem.Select_MT.get() =='absorption':
-                     gTot = makeMultiGroup(lines, 3,1)
-                     gSca = makeMultiGroup(lines, 3,2)
+                     gTot = makeMultiGroup(mem.lines, 3,1)
+                     gSca = makeMultiGroup(mem.lines, 3,2)
                      x = np.array(gTot.eBins_n)
                      y = np.array(gTot.xs) - np.array(gSca.xs)
 
                 else:
-                     g = makeMultiGroup(lines, 3,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
+                     g = makeMultiGroup(mem.lines, 3,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
                      x = np.array(g.eBins_n)
                      y = np.array(g.xs)
 
@@ -1841,7 +1841,7 @@ def displayAnalysis(event=None):
                 mem.resultsText.insert(INSERT, '%4i %10s %15.3e %15.3e\n'%(i, r[0], r[1], r[2]))
 
 
-    if mem.Select_MT.get() == 'xs':
+    else:# mem.Select_MT.get() == 'xs':
         xs_list = [mem.thermalDict, mem.fissionDict, mem.fusionDict, mem.eUserDict]
         xs_listS = ['thermalDictSorted', 'fissionDictSorted', 'fusionDictSorted', 'eUserDictSorted']
         e_list  = ['thermal', 'fiss', 'fus', 'user']
