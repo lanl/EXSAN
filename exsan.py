@@ -1471,7 +1471,7 @@ def addMe(root, processOnly=False):
         priorDownload.destroy()
 
     yesNo_var = IntVar()
-    yesNo_var.set(1)
+    yesNo_var.set(0)
     for k in sorted(nndcDict.keys()):
         if mem.downloadList[k].get() == 1:
             if urllib2.urlopen(nndcDict[k][0]).geturl() == nndcDict[k][0]:
@@ -1481,7 +1481,7 @@ def addMe(root, processOnly=False):
 
                 if os.path.isdir(kDir) and not processOnly:
                     priorDownload = Toplevel()
-                    priorDownload.geometry('+300+200')
+                    priorDownload.geometry('+400+200')
                     pdl_text1 = '%s has already been downloaded.\n Subdirectories include:\n'%(k)
                     for i, dir in enumerate(dirDict2[k], start=1):
                         if os.path.isdir(dir):
@@ -1490,16 +1490,23 @@ def addMe(root, processOnly=False):
                     pdl_label1 = Label(priorDownload, text=pdl_text1, justify='left')
                     pdl_label1.grid(row=0, column=0, columnspan=2)
                     yes_btn = Button(priorDownload, text='Yes, download and overwrite', command = lambda dlVar = 1: setReDownload(dlVar))
-                    no_btn = Button(priorDownload, text='No, keep current downloaded library', command = lambda dlVar = 0: setReDownload(dlVar))
+                    no_btn1 = Button(priorDownload, text='keep current downloaded library and clean up', command = lambda dlVar = 2: setReDownload(dlVar))
+                    no_btn2 = Button(priorDownload, text='No, keep current downloaded library', command = lambda dlVar = 0: setReDownload(dlVar))
                     yes_btn.grid(row=1, column=0)
-                    no_btn.grid(row=1, column=1)
+                    no_btn1.grid(row=1, column=1)
+                    no_btn2.grid(row=1, column=2)
                     # wait for user feedback
                     root.wait_window(priorDownload)
 
+                elif not os.path.isdir(kDir):
+                    yesNo_var.set(1)
+
+                if yesNo_var.get() == 2:
+                    processOnly = True
+
                 if processOnly:
                     yesNo_var.set(1)
-                    tmp = nndcDict[k][0].split('/')[-1]
-                    mv('%s/%s'%(kDir, tmp),'.')
+                    mv('%s/%s'%(kDir, dest),'.')
 
                 if yesNo_var.get() == 1:
                     if os.path.isdir(kDir):
@@ -1517,7 +1524,7 @@ def addMe(root, processOnly=False):
                     start = time.time()
                     # mem.urlFile.retrieve(nndcDict[k][0], '/'.join([kDir, dest]))
                     if processOnly:
-                        mv(tmp, kDir)
+                        mv(dest, kDir)
                     else:
                         download(nndcDict[k][0], '/'.join([kDir, dest]))
                     end = time.time()
@@ -1924,6 +1931,7 @@ def run_njoy(root):
     processList = []
     reprocess = IntVar()
     reprocess.set(0)
+    sys.stdout = open('log_njoy.txt', 'w')
 
     for key,value in mem.downloadList.iteritems():
         if value.get()==1 and key!='ver_xRay':
@@ -1931,12 +1939,19 @@ def run_njoy(root):
     if not os.path.isdir('./working/multigroup'):
         os.mkdir('./working/multigroup')
 
+    start = time.time()
+
     for value in processList:
         newValue = dirDict2[value][mem.particle.get()]
         checkDir = './'+newValue+'/*.txt'
         myDir = './'+newValue+'/'
 
-        if os.path.isdir('./'+newValue+'/multigroup'):
+        files = glob(checkDir)
+        with open(files[0],'r') as f:
+            line = f.readline()
+
+        if 'NJOY' in line:
+        # if os.path.isdir('./'+newValue+'/multigroup'):
             priorProcess = Toplevel()
             priorProcess.geometry('+300+200')
             pdl_text1 = '%s has already been processed with NJOY.\nProcess again and overwrite?'%(newValue)
@@ -1951,26 +1966,43 @@ def run_njoy(root):
             if reprocess.get()==0:
                 continue
 
-        else:
-            reprocess.set(0)
 
         if reprocess.get() ==1:
             addMe(root, processOnly=True)
-
-        if os.path.isdir('./'+newValue):
-
-            if not os.path.isdir('./'+newValue+'/multigroup'):
-                os.mkdir('./'+newValue+'/multigroup')
+            os.mkdir('./'+newValue+'/multigroup')
             files = glob(checkDir)
+            mem.logText.insert(INSERT, 'NJOY is starting to process %s\n'%(value))
             for file in files:
                 if options.verbose: print 'NJOY working on %s'%(file)
                 NJOY(file)
 
+            end = time.time()
             os.system('mv ./working/*.txt '+myDir)
             os.system('mv ./working/multigroup/*.txt '+myDir+'/multigroup')
-            mem.logText.insert(INSERT, 'NJOY processing of %s complete\n\n'%(dirDict2[value]))
+            tNJOY = (end - start)/60.
+            mem.logText.insert(INSERT, 'NJOY processing of %s complete.\n\n'%(value))
+
+        elif os.path.isdir('./'+newValue):
+            if not os.path.isdir('./'+newValue+'/multigroup'):
+                os.mkdir('./'+newValue+'/multigroup')
+            mem.logText.insert(INSERT, 'NJOY is starting to process %s\n'%(value))
+            files = glob(checkDir)
+            for file in files:
+                if options.verbose: print 'NJOY working on %s'%(file)
+                NJOY(file)
+            end = time.time()
+            os.system('mv ./working/*.txt '+myDir)
+            os.system('mv ./working/multigroup/*.txt '+myDir+'/multigroup')
+            tNJOY = (end - start)/60.
+            mem.logText.insert(INSERT, 'NJOY processing of %s complete\n\n'%(value))
         else:
             pass
+    if value==processList[-1]:
+        mem.logText.insert(INSERT, 'Loading the %s library...\n'%(value))
+        load = np.sort(nndcDict.keys()).tolist().index(value)
+        mem.verSelect.set(load)
+        update_files()
+
 
 #===========================================================
 #   Save results of rank order analysis to file
@@ -2416,7 +2448,7 @@ def makeWidgets(root):
     particles = ['neutrons','x-rays']
     for j, ver in enumerate(particles):
         mem.particleSelect[ver] = Radiobutton(mem.version_frame,variable=mem.particle,text=ver,
-           value=j, font=mem.HDG1)
+           value=j, font=mem.HDG1, command=update_files)
         mem.particleSelect[ver].grid(row=1,column=i+1)
         i+=1
 
@@ -2676,6 +2708,10 @@ def runBatch():
 
 
 def linkNjoy():
+    if not os.path.isdir('working'):
+        os.mkdir('working')
+    else:
+        pass
     if not os.path.isfile('./working/njoy') and not os.path.islink('./working/njoy'):
         if not options.njoyPath:
             print '\n***Note: NJOY2016 is required to process raw ENDF files'
@@ -2685,6 +2721,8 @@ def linkNjoy():
             os.symlink('%s'%(options.njoyPath), 'working/njoy')
             print 'NJOY soft link created'
         return
+
+
 
 def main():
     print "                    _______  ______    _    _   _ "
@@ -2721,6 +2759,7 @@ def main():
 
     # for testing, automatically load ENDF 8
     if options.auto:
+        st()
         mem.verSelect.set(6)
         update_files()
         # getInfo2(demoIsotopes, False, False)
