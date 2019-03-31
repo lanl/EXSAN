@@ -43,6 +43,8 @@ import time
 from copy import copy
 from pdb import set_trace as st
 from pylab import connect, draw
+import subprocess as sp
+from shutil import move as mv
 from collections import OrderedDict as od
 from argparse import ArgumentParser
 
@@ -52,6 +54,7 @@ opt.add_argument('-b',  '--batch', dest='batchFile',  help='batch input file')
 opt.add_argument('-v',   '--verbose', action='store_true', help='verbosity')
 opt.add_argument('-d', '--demo', action='store_true', help='demo mode')
 opt.add_argument('-a', '--auto', action='store_true', help='minimal automation when starting up')
+opt.add_argument('-l', '--log', action='store_true', help='write log file exsan.log')
 options = opt.parse_args()
 
 demoIsotopes = ['H-1 total','Li-6 total']
@@ -736,9 +739,12 @@ def update_files(event=None):
         mem.isotopes = []
 
         if len(mem.files) > 0:
-            mem.logText.insert(INSERT, str(len(mem.files))+' isotopes in '+mem.fileDir+' directory. \n')
+            # mem.logText.insert(INSERT, str(len(mem.files))+' isotopes in '+mem.fileDir+' directory. \n')
+            # mem.logText(insert(INSERT, '%i isotopes in %s directory'%(len(mem.files), mem.fileDir)))
+            logTxtAndPrint('%i isotopes in %s directory\n'%(len(mem.files), mem.fileDir))
         else:
-            mem.logText.insert(INSERT, mem.fileDir+' directory is empty. \n')
+            # mem.logText.insert(INSERT, mem.fileDir+' directory is empty. \n')
+            logTxtAndPrint('%s directory is empty.\n'%(mem.fileDir))
 
         # initialize progress bar
         popup = Toplevel()
@@ -853,7 +859,8 @@ def getInfo2(isotopes, flag_pOrM, allFlag):
         mem.plotX = {}
         mem.plotY= {}
         for title in mem.plotTitles:
-            mem.logText.insert(INSERT, title+' removed from plot\n')
+            # mem.logText.insert(INSERT, title+' removed from plot\n')
+            logTxtAndPrint('%s removed from plot. \n'%(title))
         mem.plotTitles = []
         mem.plotTherm = []
         mem.plotFiss = []
@@ -933,20 +940,29 @@ def addPlot(flag_pOrM, allFlag, mixFlag=False):#event=None, flag_pOrM=False):
 
         title = mem.Title_var.get()+' '+mem.MT_descript.get()
 
+    N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
+
     if mem.microMacro.get() == 1 and len(periodicTableDict[mem.element])== 5:
-        N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
+        # N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
         y = N*y*1.e-24
-        mem.logText.insert(INSERT,'Number density for '+mem.element+' = '+str(N)+'\n')
+        # mem.logText.insert(INSERT,'Number density for '+mem.element+' = '+str(N)+'\n')
+        # logTxtAndPrint('Number density for %s = %.3f\n'%(mem.elements, N))
 
     elif mem.microMacro.get() == 2 and len(periodicTableDict[mem.element])== 5:
-        N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
+        # N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
         y = 1/(N*y*1.e-24)
-        mem.logText.insert(INSERT,'Number density for '+mem.element+' = '+str(N)+'\n')
+        # mem.logText.insert(INSERT,'Number density for '+mem.element+' = '+str(N)+'\n')
+        # logTxtAndPrint('Number density for %s = %.3f\n'%(mem.elements, N))
 
     elif mem.microMacro.get() == 3 and len(periodicTableDict[mem.element])== 5:
-        N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
+        # N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
         y = N*y*1.e-24/periodicTableDict[mem.element][4]
-        mem.logText.insert(INSERT,'Number density for '+mem.element+' = '+str(N)+'\n')
+        # mem.logText.insert(INSERT,'Number density for '+mem.element+' = '+str(N)+'\n')
+        # logTxtAndPrint('Number density for %s = %.3f\n'%(mem.elements, N))
+
+
+
+    logTxtAndPrint('\nNumber density for %s = %.3e\n'%(mem.element, N))
 
     e_th    = 0.025 # thermal neutron energy
     e_fiss  = 1.0e6 # fission neutron energy
@@ -993,10 +1009,16 @@ def addPlot(flag_pOrM, allFlag, mixFlag=False):#event=None, flag_pOrM=False):
     mem.plotFiss.append(xs_fiss)
     mem.plotFus.append(xs_fus)
     mem.plotUser.append(xs_user)
-    mem.logText.insert(INSERT, title+' added to plot\n')
-    mem.logText.insert(INSERT, 'Atomic mass  : '+str(periodicTableDict[mem.element][3])+'\n')
-    mem.logText.insert(INSERT, 'Density(g/cc): '+str(periodicTableDict[mem.element][4])+'\n')
-    mem.logText.insert(INSERT, '--------------------------\n\n')
+    # mem.logText.insert(INSERT, title+' added to plot\n')
+    # mem.logText.insert(INSERT, 'Atomic mass  : '+str(periodicTableDict[mem.element][3])+'\n')
+    # mem.logText.insert(INSERT, 'Density(g/cc): '+str(periodicTableDict[mem.element][4])+'\n')
+    # mem.logText.insert(INSERT, '--------------------------\n\n')
+
+    logStr =  '%s added to plot.\n'%(title)
+    logStr += 'Atomic mass: %.3f\n'%(periodicTableDict[mem.element][3])
+    logStr += u'Density (g/cm\u00b3): %.3f\n'%(periodicTableDict[mem.element][4])
+    logStr += '-'*25+'\n'
+    logTxtAndPrint('%s\n'%(logStr))
 
 #===========================================================
 #   A function to remove plots from the list
@@ -1011,7 +1033,8 @@ def delPlot(event):
     mem.plotX.pop(mem.plotTitles[-1])
     mem.plotY.pop(mem.plotTitles[-1])
     mem.plotTitles = mem.plotTitles[:-1]
-    mem.logText.insert(INSERT, title+' removed from plot\n')
+    # mem.logText.insert(INSERT, title+' removed from plot\n')
+    logTxtAndPrint('%s removed from plot.\n'%(title))
     plotMe2()
 
 #===========================================================
@@ -1247,7 +1270,8 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
         pl.suptitle('Various Isotopes')
     else:
         pl.suptitle(mem.plotTitles[0].split()[0])
-    mem.logText.insert(INSERT, 'Processing %s\n'%(mem.plotTitles[0].split()[0]))
+    # mem.logText.insert(INSERT, 'Processing %s\n'%(mem.plotTitles[0].split()[0]))
+    logTxtAndPrint('Processing %s\n'%(mem.plotTitles[0].split()[0]))
 
     # snap
     if mem.Cursor_var.get() and not allFlag:
@@ -1441,9 +1465,6 @@ def nndcParse(ver):
 #   These functions control the download select buttons
 #===========================================================
 def addMe(root, processOnly=False):
-    import subprocess as sp
-    from shutil import move as mv
-
     def download(url,destination):
         f = urllib2.urlopen(url)
         totalSize = int(f.info().getheader('Content-Length').strip())/1e6
@@ -1532,14 +1553,20 @@ def addMe(root, processOnly=False):
                 # untar the file in its respective fileDirectory
                 sp.check_call(['tar','-xvf', '/'.join([kDir, dest]), '-C',kDir+'/'])
                 print k,'has been dowloaded. Post-processing in progress...'
-                mem.logText.insert(INSERT, '\n%s has been dowloaded. Post-processing in progress...\n'%k)
+                # mem.logText.insert(INSERT, '\n%s has been dowloaded. Post-processing in progress...\n'%k)
+                logTxtAndPrint('\n%s has been dowloaded. Post-processing in progress...\n'%k)
                 nndcParse(k)
-                print k,'has been successfully post-processed.'
-                mem.logText.insert(INSERT, '\n%s has been successfully post-processed.\n'%k)
+                # print k,'has been successfully post-processed.'
+                # mem.logText.insert(INSERT, '\n%s has been successfully post-processed.\n'%k)
+                logTxtAndPrint('\n%s has been successfully post-processed.\n'%k)
+                load = np.sort(nndcDict.keys()).tolist().index(k)
+                mem.verSelect.set(load)
+                update_files()
 
             else:
                 print k,'cannot be downloaed from NNDC at this time.'
-                mem.logText.insert(INSERT, '\n%s has been successfully post-processed.\n'%k)
+                # mem.logText.insert(INSERT, '\n%s hcannot be downloaed from NNDC at this time.\n'%k)
+                logTxtAndPrint('\n%s hcannot be downloaed from NNDC at this time.\n'%k)
 
 
 
@@ -1552,12 +1579,14 @@ def fileChecker(root):
             if os.path.isdir('./'+value):
                 files = glob(checkDir)
                 if len(files) > 0:
-                    mem.logText.insert(INSERT, str(len(files))+' files detected in '+value+' folder  \n')
+                    # mem.logText.insert(INSERT, str(len(files))+' files detected in '+value+' folder  \n')
+                    logTxtAndPrint('%i files detected in %s subdirectory.\n'%(len(files), value))
                     numFilesFound += len(files)
                     mem.verSelect.set(i)
 
     if numFilesFound ==0:
-        mem.logText.insert(INSERT, 'Must download ENDF files first.\n')
+        # mem.logText.insert(INSERT, 'Must download ENDF files first.\n')
+        logTxtAndPrint('Must download ENDF files first.\n')
         root.bind('<Escape>', close)
         root.mainloop()
 
@@ -1638,7 +1667,8 @@ def master_list(tab):
     for i in mem.reactionsDict[mem.periodicTableTabs[whichTab][0]][mem.Select_MT.get()]:
         mem.preCheckedFiles.append(i[1])
 
-    mem.logText.insert(INSERT,'%s isotopes found\n'%(str(len(mem.preCheckedFiles))))
+    # mem.logText.insert(INSERT,'%s isotopes found\n'%(str(len(mem.preCheckedFiles))))
+    logTxtAndPrint('%i isotopes found for %s.\n'%(len(mem.preCheckedFiles), mem.Select_MT.get()))
 
     status = 0
     tally = 0
@@ -1792,7 +1822,8 @@ def master_list(tab):
 
     mem.decayTypeDict['Half Life'] = mem.tHalfDict
     popup.destroy()
-    mem.logText.insert(INSERT, 'Analysis complete.\n')
+    # mem.logText.insert(INSERT, 'Analysis complete.\n')
+    logTxtAndPrint('Analysis complete.\n')
 
     analysisType = 'decay' if mem.Select_MT.get() == 'radioactive_decay' else 'xs'
     displayAnalysis()
@@ -1922,7 +1953,7 @@ def run_njoy(root):
         f.write("stop\n")
         f.close()
         os.chdir('./working')
-        os.system('./njoy < njoy.in')
+        os.system('./njoy < njoy.in | tee -a %s'%(logFile))
         os.system('mv tape22 '+file.split('/')[-1])
         os.system('mv tape23 multigroup/'+file.split('/')[-1])
         os.chdir('../')
@@ -1931,7 +1962,6 @@ def run_njoy(root):
     processList = []
     reprocess = IntVar()
     reprocess.set(0)
-    sys.stdout = open('log_njoy.txt', 'w')
 
     for key,value in mem.downloadList.iteritems():
         if value.get()==1 and key!='ver_xRay':
@@ -1945,12 +1975,15 @@ def run_njoy(root):
         newValue = dirDict2[value][mem.particle.get()]
         checkDir = './'+newValue+'/*.txt'
         myDir = './'+newValue+'/'
+        logFile = 'njoy_%s.log'%(value.replace('/','_').replace('-','_'))
+        if not os.path.isfile(logFile):
+            os.system('touch ./working/%s'%(logFile))
 
         files = glob(checkDir)
         with open(files[0],'r') as f:
             line = f.readline()
 
-        if 'NJOY' in line:
+        if 'NJOY processed' in line:
         # if os.path.isdir('./'+newValue+'/multigroup'):
             priorProcess = Toplevel()
             priorProcess.geometry('+300+200')
@@ -1971,7 +2004,8 @@ def run_njoy(root):
             addMe(root, processOnly=True)
             os.mkdir('./'+newValue+'/multigroup')
             files = glob(checkDir)
-            mem.logText.insert(INSERT, 'NJOY is starting to process %s\n'%(value))
+            # mem.logText.insert(INSERT, 'NJOY is starting to process %s\n'%(value))
+            logTxtAndPrint('NJOY is starting to process %s.\n'%(value))
             for file in files:
                 if options.verbose: print 'NJOY working on %s'%(file)
                 NJOY(file)
@@ -1980,12 +2014,14 @@ def run_njoy(root):
             os.system('mv ./working/*.txt '+myDir)
             os.system('mv ./working/multigroup/*.txt '+myDir+'/multigroup')
             tNJOY = (end - start)/60.
-            mem.logText.insert(INSERT, 'NJOY processing of %s complete.\n\n'%(value))
+            # mem.logText.insert(INSERT, 'NJOY processing of %s complete.\n\n'%(value))
+            logTxtAndPrint('NJOY processing of %s complete.\n\n'%(value))
 
         elif os.path.isdir('./'+newValue):
             if not os.path.isdir('./'+newValue+'/multigroup'):
                 os.mkdir('./'+newValue+'/multigroup')
-            mem.logText.insert(INSERT, 'NJOY is starting to process %s\n'%(value))
+            # mem.logText.insert(INSERT, 'NJOY is starting to process %s\n'%(value))
+            logTxtAndPrint('NJOY is starting to process %s.\n'%(value))
             files = glob(checkDir)
             for file in files:
                 if options.verbose: print 'NJOY working on %s'%(file)
@@ -1994,14 +2030,17 @@ def run_njoy(root):
             os.system('mv ./working/*.txt '+myDir)
             os.system('mv ./working/multigroup/*.txt '+myDir+'/multigroup')
             tNJOY = (end - start)/60.
-            mem.logText.insert(INSERT, 'NJOY processing of %s complete\n\n'%(value))
+            # mem.logText.insert(INSERT, 'NJOY processing of %s complete\n\n'%(value))
+            logTxtAndPrint('NJOY processing of %s complete\n\n'%(value))
         else:
             pass
     if value==processList[-1]:
-        mem.logText.insert(INSERT, 'Loading the %s library...\n'%(value))
+        # mem.logText.insert(INSERT, 'Loading the %s library...\n'%(value))
+        logTxtAndPrint('Loading the %s library...\n'%(value))
         load = np.sort(nndcDict.keys()).tolist().index(value)
         mem.verSelect.set(load)
         update_files()
+    sys.stdout = sys.__stdout__
 
 
 #===========================================================
@@ -2052,7 +2091,8 @@ def saveText(*args):
     with open(outFileName,'a') as f:
         np.savetxt(f,mem.all, delimiter="", fmt="%-18s")
     f.close()
-    mem.logText.insert(INSERT, 'Analysis results written to file '+outFileName+'\n')
+    # mem.logText.insert(INSERT, 'Analysis results written to file '+outFileName+'\n')
+    logTxtAndPrint('Analysis results written to file %s.\n'%(outFileName))
 
 def reset():
     for ver in nndcDict.keys():
@@ -2080,7 +2120,8 @@ def clearAll(event=None):
     pl.close('all')
     mem.resultsText.delete('1.0', END)
     mem.logText.delete('1.0', END)
-    mem.logText.insert(INSERT, 'Plots cleared \n')
+    # mem.logText.insert(INSERT, 'Plots cleared \n')
+    logTxtAndPrint('Plots cleared.\n')
     mem.batchFile = None
     # mem.decaySummaryEnergy = od()
     # mem.decaySummaryIntensity = od()
@@ -2632,7 +2673,8 @@ def runBatch():
 
     lines.pop(0)
     mem.logText.delete('1.0', END)
-    mem.logText.insert(INSERT, 'Batch processing: %s\n'%(batchFile))
+    # mem.logText.insert(INSERT, 'Batch processing: %s\n'%(batchFile))
+    logTxtAndPrint('Batch processing: %s\n'%(batchFile))
 
     saveFlag_master = flag_pOrM_master = allFlag_master = False
     saveFlag = flag_pOrM = allFlag = False
@@ -2723,8 +2765,41 @@ def linkNjoy():
         return
 
 
+class Log(object):
+    '''
+    This class allows standard output to be written both to a log file and to the terminal.
+    '''
+    def __init__(self, message=None):
+        self.terminal = sys.stdout
+        self.log = open('exsan.log', 'a')
+        self.message = message
+        if not self.message == None:
+            self.write(message)
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+def logTxtAndPrint(s):
+    s = s.encode('utf-8')
+    mem.logText.insert(END, s)
+    # UNIX can't print unicode characters to the terminal? so try this:
+
+    if options.log:
+        try:
+            Log(s)
+        except:
+            pass
+    else:
+        print s
 
 def main():
+    if options.log:
+        if os.path.isfile('./exsan.log'):
+            sp.check_call(['rm', './exsan.log'])
+        # sys.stdout = Log()
+    else:
+        sys.stdout = sys.__stdout__
     print "                    _______  ______    _    _   _ "
     print "                   | ____\ \/ / ___|  / \  | \ | |"
     print "                   |  _|  \  /\___ \ / _ \ |  \| |"
@@ -2746,6 +2821,7 @@ def main():
     root.grid_columnconfigure(0, weight=1)
     root.grid_rowconfigure(0, weight=1)
 
+    st()
     linkNjoy()
     makeWidgets(root)
     fileChecker(root)
@@ -2759,7 +2835,6 @@ def main():
 
     # for testing, automatically load ENDF 8
     if options.auto:
-        st()
         mem.verSelect.set(6)
         update_files()
         # getInfo2(demoIsotopes, False, False)
