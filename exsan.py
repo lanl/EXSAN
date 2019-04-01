@@ -1,6 +1,8 @@
 """
 Title:      EXSAN: An (E)NDF (C)ross (S)ection (An)alysis
 
+LA-CC ID:   Los Alamos National Laboratory Computer Code LA-CC-19-002
+
 Author:     H. Omar Wooten, PhD, DABR
             Los Alamos National Laboratory
             hasani@lanl.gov
@@ -15,6 +17,8 @@ Abstract:   This application provides an intutive  graphical interface for:
             4) Plotting cross sections for isotopic mixes (multigroup only)
 
             5) Automated plotting and saving of cross section figures with an input file.
+
+            6) Automated analysis of ENDF/B-VII and ENDF/B-VIII.0 radioactive decay libraries and plotting of the decay particles.
 
 References:
             Wooten, H.O., "An application for streamlined and automated ENDF Cross Section Analysis and visualization," Ann Nuc Energy, 129, 482-486, 2019
@@ -43,6 +47,8 @@ import time
 from copy import copy
 from pdb import set_trace as st
 from pylab import connect, draw
+import subprocess as sp
+from shutil import move as mv
 from collections import OrderedDict as od
 from argparse import ArgumentParser
 
@@ -52,6 +58,7 @@ opt.add_argument('-b',  '--batch', dest='batchFile',  help='batch input file')
 opt.add_argument('-v',   '--verbose', action='store_true', help='verbosity')
 opt.add_argument('-d', '--demo', action='store_true', help='demo mode')
 opt.add_argument('-a', '--auto', action='store_true', help='minimal automation when starting up')
+opt.add_argument('-l', '--log', action='store_true', help='write log file exsan.log')
 options = opt.parse_args()
 
 demoIsotopes = ['H-1 total','Li-6 total']
@@ -109,7 +116,6 @@ class makeAlphabetButton(object):
             az_menu = Menu(az_btn.menu)
             for el in self.azDict[letter]:
                 el_menu = Menu(az_menu)
-                # az_menu.add_command(label=el,command=self.dummy)
                 for iso in self.elementsIsotopesDict[el]:
                     el_menu.add_command(label=iso,command=lambda iso=iso: self.setVars(iso))
                 az_menu.add_cascade(label=el, menu=el_menu)
@@ -291,7 +297,6 @@ class SnapToCursor(object):
         self.textXY = textXY
         self.textLabel = textLabel
         self.txt = ax.text(self.textXY[0], self.textXY[1], '', transform=ax.transAxes)
-        # self.txt = ax.text(0.65, 0.9, '', transform=ax.transAxes)
         self.txt.set_bbox(dict(facecolor='white', alpha=0.9, edgecolor='black'))
         self.fig = fig
         self.titles = titles
@@ -318,11 +323,31 @@ class SnapToCursor(object):
         self.fig.draw()
 
 #===========================================================
+# This class allows standard output to be written both to
+# a log file and to the terminal.
+#===========================================================
+class Log(object):
+    '''
+    This class allows standard output to be written both to a log file and to the terminal.
+    '''
+    def __init__(self, message=None):
+        self.terminal = sys.stdout
+        self.log = open('exsan.log', 'a')
+        self.message = message
+        if not self.message == None:
+            self.write(message)
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+
+
+#===========================================================
 #  This function serves as a gate for reading NJOY-processed
 #  files based on whether they are a GROUPR output or not
 #===========================================================
 def makeMultiGroup(lines, MF, MT):
-    # global groupr
     if lines[1].split()[4] == '-1':
         g = groupr(lines, int(MF), int(MT))
         return g
@@ -430,23 +455,8 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
         decay['d_ricl'], \
          = ([] for i in range(14))
 
-    # decayTypes = {
-    #     0. : 'Gamma',
-    #     1. : 'Beta-',
-    #     2. : 'EC, Beta+',
-    #     4. : 'Alpha',
-    #     5. : 'Neutrons',
-    #     6. : 'SF',
-    #     7. : 'Protons',
-    #     8. : 'e- (Auger, conversion)',
-    #     9. : 'X-rays',
-    #     10.: 'e- anti-neutrinos',
-    #     11.: 'e- neutrinos'}
-
-
     decayModes = copy(decayTypes)
     decayModes[3.]= 'IT'
-
 
     fileName = '%s/%s.txt'%(dir, ''.join(iso.split('-')))
 
@@ -462,11 +472,11 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
     iLast = n - v[::-1].index(mfmtstr)  # last occurrence of MT/MF section
 
     data = []
-
     decayAll = {}
     decay = {}
     decaySummary = {}
 
+    # there's probably a better way to to this....
     decayAll['avgDecayEnergy'], \
     decayAll['rtyp'],  \
     decayAll['rfs'],    \
@@ -500,7 +510,6 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
         mem.resultsText.insert(INSERT, '%s is stable.\n'%(iso))
         return
 
-
     if decayAll['nc'] == 3:
         iStart, iEnd = iFirst+2, iFirst+3
     else:
@@ -525,7 +534,6 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
     decayAll['br'] = data[4::6]
     decayAll['d_br'] = data[5::6]
 
-    # mem.decaySummary['ZA'] = [int(mem.decayAll['za'])]
     decaySummary[u'T-\u00BD'] = [decayAll['tHalf']]
     decaySummary['Decay Modes'] = zip(decayAll['rtyp'], decayAll['br'])
 
@@ -582,23 +590,8 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
         radSummary.sort(key=lambda x: x[1])
         decaySummary[decay['styp']] = radSummary
 
-        # if miniParse:
-        #     mem.decaySummaryIntensity[iso] = od()
-        #     mem.decaySummaryEnergy[iso]  =od()
-        #     decaySummary[u'T-\u00BD']
-        #
-        #     mem.decaySummaryIntensity[iso][decay['styp']] = radSummary[-1]
-        #     radSummary = zip(decay['er'], decay['ri'])
-        #     radSummary.sort(key=lambda x: x[0])
-        #     mem.decaySummaryEnergy[iso][decay['styp']] = radSummary[-1]
-        #     mem.decaySummaryEnergy[iso][u'T-\u00BD'] = decaySummary[u'T-\u00BD']
-        #     mem.decaySummaryEnergy[iso]['Decay Modes'] = decaySummary['Decay Modes']
-
-
     if miniParse:
         return decaySummary
-        # return mem.decaySummaryEnergy[iso], mem.decaySummaryIntensity[iso]
-
 
     mem.resultsText.delete('1.0', END)
     mem.resultsText.insert(INSERT, '     -- Radioactive Decay Summary: %s --\n\n'%(iso))
@@ -635,24 +628,19 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
                     mem.resultsText.insert(INSERT, '='*50+'\n\n')
             continue
 
-
         elif k in decayTypes.values():
             mem.resultsText.insert(INSERT, '%20s %16s\n\n'%('E (eV)','Fraction'))
 
         for vi in v:
             try:
-                # print '%10.9e %10.9e'%(vi[0], vi[1])
                 mem.resultsText.insert(INSERT,'%21.4e %16.4e \n'%(vi[0], vi[1]))
             except:
-                # print '%s'%(str(vi))
                 mem.resultsText.insert(INSERT, '\t%s\n'%(str(vi)))
-        # print '='*25
         mem.resultsText.insert(INSERT, '\n'+'='*50+'\n')
 
         mem.decaySummary = copy(decaySummary)
         mem.decaySummary['isotope']=iso
         mem.decayPlotButton['state'] = 'normal'
-
 
 #===========================================================
 #   Create a dictionary of MT/MF combinations from lines
@@ -736,9 +724,9 @@ def update_files(event=None):
         mem.isotopes = []
 
         if len(mem.files) > 0:
-            mem.logText.insert(INSERT, str(len(mem.files))+' isotopes in '+mem.fileDir+' directory. \n')
+            logTxtAndPrint('%i isotopes in %s directory\n'%(len(mem.files), mem.fileDir))
         else:
-            mem.logText.insert(INSERT, mem.fileDir+' directory is empty. \n')
+            logTxtAndPrint('%s directory is empty.\n'%(mem.fileDir))
 
         # initialize progress bar
         popup = Toplevel()
@@ -776,7 +764,6 @@ def update_files(event=None):
             if len(b) > 1:
                 mem.elements.append(b[0])
                 if len(b) > 2:
-                    # c = b[0]+'-'+b[1]+b[2]
                     c = b[0]+'-'+''.join(b[1:-1])
                 else:
                     c = b[0]+'-'+b[1]
@@ -853,7 +840,7 @@ def getInfo2(isotopes, flag_pOrM, allFlag):
         mem.plotX = {}
         mem.plotY= {}
         for title in mem.plotTitles:
-            mem.logText.insert(INSERT, title+' removed from plot\n')
+            logTxtAndPrint('%s removed from plot. \n'%(title))
         mem.plotTitles = []
         mem.plotTherm = []
         mem.plotFiss = []
@@ -933,20 +920,18 @@ def addPlot(flag_pOrM, allFlag, mixFlag=False):#event=None, flag_pOrM=False):
 
         title = mem.Title_var.get()+' '+mem.MT_descript.get()
 
+    N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
+
     if mem.microMacro.get() == 1 and len(periodicTableDict[mem.element])== 5:
-        N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
         y = N*y*1.e-24
-        mem.logText.insert(INSERT,'Number density for '+mem.element+' = '+str(N)+'\n')
 
     elif mem.microMacro.get() == 2 and len(periodicTableDict[mem.element])== 5:
-        N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
         y = 1/(N*y*1.e-24)
-        mem.logText.insert(INSERT,'Number density for '+mem.element+' = '+str(N)+'\n')
 
     elif mem.microMacro.get() == 3 and len(periodicTableDict[mem.element])== 5:
-        N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
         y = N*y*1.e-24/periodicTableDict[mem.element][4]
-        mem.logText.insert(INSERT,'Number density for '+mem.element+' = '+str(N)+'\n')
+
+    logTxtAndPrint('\nNumber density for %s = %.3e\n'%(mem.element, N))
 
     e_th    = 0.025 # thermal neutron energy
     e_fiss  = 1.0e6 # fission neutron energy
@@ -993,10 +978,12 @@ def addPlot(flag_pOrM, allFlag, mixFlag=False):#event=None, flag_pOrM=False):
     mem.plotFiss.append(xs_fiss)
     mem.plotFus.append(xs_fus)
     mem.plotUser.append(xs_user)
-    mem.logText.insert(INSERT, title+' added to plot\n')
-    mem.logText.insert(INSERT, 'Atomic mass  : '+str(periodicTableDict[mem.element][3])+'\n')
-    mem.logText.insert(INSERT, 'Density(g/cc): '+str(periodicTableDict[mem.element][4])+'\n')
-    mem.logText.insert(INSERT, '--------------------------\n\n')
+
+    logStr =  '%s added to plot.\n'%(title)
+    logStr += 'Atomic mass: %.3f\n'%(periodicTableDict[mem.element][3])
+    logStr += u'Density (g/cm\u00b3): %.3f\n'%(periodicTableDict[mem.element][4])
+    logStr += '-'*25+'\n'
+    logTxtAndPrint('%s\n'%(logStr))
 
 #===========================================================
 #   A function to remove plots from the list
@@ -1011,7 +998,7 @@ def delPlot(event):
     mem.plotX.pop(mem.plotTitles[-1])
     mem.plotY.pop(mem.plotTitles[-1])
     mem.plotTitles = mem.plotTitles[:-1]
-    mem.logText.insert(INSERT, title+' removed from plot\n')
+    logTxtAndPrint('%s removed from plot.\n'%(title))
     plotMe2()
 
 #===========================================================
@@ -1055,8 +1042,6 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
             return 0.
         else:
             return intTop/intBtm
-        # return intTop/intBtm
-        # return 1.0
 
     # resonance integral
     def ResInt(E, sig, Elow, Ehigh):
@@ -1219,6 +1204,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
     if mem.particle.get()==1:
         pieList = [mem.plotFiss, mem.plotFus, mem.plotUser]
         titleList = mem.columnText[2:]
+
     if allFlag:
         for i, eGroup in enumerate(pieList):
             if not sum(eGroup[1:])==0.:
@@ -1247,7 +1233,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
         pl.suptitle('Various Isotopes')
     else:
         pl.suptitle(mem.plotTitles[0].split()[0])
-    mem.logText.insert(INSERT, 'Processing %s\n'%(mem.plotTitles[0].split()[0]))
+    logTxtAndPrint('Processing %s\n'%(mem.plotTitles[0].split()[0]))
 
     # snap
     if mem.Cursor_var.get() and not allFlag:
@@ -1283,7 +1269,6 @@ def plotDecay():
         'e- anti-neutrinos': ['|', 60*ps, 0.5, 'violet'],
         'e- neutrinos': ['-', 60*ps, 0.5, 'slategray']}
 
-    # pl.cla()
     fig = pl.figure('Radioactive Decay', figsize=(12,8))
     ax = fig.add_subplot(111)
     ax.set_axisbelow(True)
@@ -1331,12 +1316,6 @@ def plotDecay():
         pl.connect('motion_notify_event', cursor.mouse_move)
 
     pl.show()
-
-
-
-
-
-
 
 #===========================================================
 #  This function unzips NNDCD ENDF files, and extracts each
@@ -1437,12 +1416,11 @@ def nndcParse(ver):
                     fOut.close()
                 f.close()
         print 'total # isostopes',tally
+
 #===========================================================
 #   These functions control the download select buttons
 #===========================================================
-def addMe(*args):
-    import subprocess as sp
-
+def addMe(root, processOnly=False):
     def download(url,destination):
         f = urllib2.urlopen(url)
         totalSize = int(f.info().getheader('Content-Length').strip())/1e6
@@ -1465,13 +1443,55 @@ def addMe(*args):
                 timeRemaining = float(bytesRemaining)/(increment/(dt/60))
                 print '%i MB remaining (approx. %.1f minutes)'%(bytesRemaining, timeRemaining)
 
+    def setReDownload(i):
+        yesNo_var.set(i)
+        priorDownload.destroy()
 
+    yesNo_var = IntVar()
+    yesNo_var.set(0)
     for k in sorted(nndcDict.keys()):
         if mem.downloadList[k].get() == 1:
             if urllib2.urlopen(nndcDict[k][0]).geturl() == nndcDict[k][0]:
 
                 kDir = k.replace('/','_').replace('-','_')
                 dest = nndcDict[k][0].split('/')[-1].replace('-','_')
+
+                if os.path.isdir(kDir) and not processOnly:
+                    priorDownload = Toplevel()
+                    priorDownload.geometry('+400+200')
+                    pdl_text1 = '%s has already been downloaded.\n Subdirectories include:\n'%(k)
+                    for i, dir in enumerate(dirDict2[k], start=1):
+                        if os.path.isdir(dir):
+                            pdl_text1+= '\t%i) %s\n'%(i, dir)
+                    pdl_text1+='Download and overwrite?'
+                    pdl_label1 = Label(priorDownload, text=pdl_text1, justify='left')
+                    pdl_label1.grid(row=0, column=0, columnspan=2)
+                    yes_btn = Button(priorDownload, text='Yes, download and overwrite', command = lambda dlVar = 1: setReDownload(dlVar))
+                    no_btn1 = Button(priorDownload, text='keep current downloaded library and clean up', command = lambda dlVar = 2: setReDownload(dlVar))
+                    no_btn2 = Button(priorDownload, text='No, keep current downloaded library', command = lambda dlVar = 0: setReDownload(dlVar))
+                    yes_btn.grid(row=1, column=0)
+                    no_btn1.grid(row=1, column=1)
+                    no_btn2.grid(row=1, column=2)
+                    # wait for user feedback
+                    root.wait_window(priorDownload)
+
+                elif not os.path.isdir(kDir):
+                    yesNo_var.set(1)
+
+                if yesNo_var.get() == 2:
+                    processOnly = True
+
+                if processOnly:
+                    yesNo_var.set(1)
+                    mv('%s/%s'%(kDir, dest),'.')
+
+                if yesNo_var.get() == 1:
+                    if os.path.isdir(kDir):
+                        sp.check_call(['rm','-rf', kDir])
+
+                elif yesNo_var.get() == 0:
+                    continue
+
                 if not os.path.isdir(kDir):
                     sp.check_call(['mkdir', kDir])
 
@@ -1480,22 +1500,25 @@ def addMe(*args):
                     print 'downloading %s data file from\n %s\n'%(k,nndcDict[k][0])
                     start = time.time()
                     # mem.urlFile.retrieve(nndcDict[k][0], '/'.join([kDir, dest]))
-                    download(nndcDict[k][0], '/'.join([kDir, dest]))
+                    if processOnly:
+                        mv(dest, kDir)
+                    else:
+                        download(nndcDict[k][0], '/'.join([kDir, dest]))
                     end = time.time()
                     print '%s downloaded in %7.3f sec'%(dest,(end-start))
                 # untar the file in its respective fileDirectory
                 sp.check_call(['tar','-xvf', '/'.join([kDir, dest]), '-C',kDir+'/'])
                 print k,'has been dowloaded. Post-processing in progress...'
-                mem.logText.insert(INSERT, '\n%s has been dowloaded. Post-processing in progress...\n'%k)
+                logTxtAndPrint('\n%s has been dowloaded. Post-processing in progress...\n'%k)
                 nndcParse(k)
-                print k,'has been successfully post-processed.'
-                mem.logText.insert(INSERT, '\n%s has been successfully post-processed.\n'%k)
+                logTxtAndPrint('\n%s has been successfully post-processed.\n'%k)
+                load = np.sort(nndcDict.keys()).tolist().index(k)
+                mem.verSelect.set(load)
+                update_files()
 
             else:
                 print k,'cannot be downloaed from NNDC at this time.'
-                mem.logText.insert(INSERT, '\n%s has been successfully post-processed.\n'%k)
-
-
+                logTxtAndPrint('\n%s hcannot be downloaed from NNDC at this time.\n'%k)
 
 
 def fileChecker(root):
@@ -1506,17 +1529,17 @@ def fileChecker(root):
             if os.path.isdir('./'+value):
                 files = glob(checkDir)
                 if len(files) > 0:
-                    mem.logText.insert(INSERT, str(len(files))+' files detected in '+value+' folder  \n')
+                    logTxtAndPrint('%i files detected in %s subdirectory.\n'%(len(files), value))
                     numFilesFound += len(files)
                     mem.verSelect.set(i)
 
     if numFilesFound ==0:
-        mem.logText.insert(INSERT, 'Must download ENDF files first.\n')
+        logTxtAndPrint('Must download ENDF files first.\n')
         root.bind('<Escape>', close)
         root.mainloop()
 
 #===========================================================
-#   Attempt to mass process all files in directory and return
+#   Mass process all files in directory and return
 #   arrays of total cross section at thermal, fiss, and fus
 #   energies
 #===========================================================
@@ -1557,9 +1580,7 @@ def master_list(tab):
     absFlag = False
     mem.mixDict = {}
 
-
-    print 'Searching for isotopes with '+mem.Select_MT.get()+' reaction...'
-#     logText.insert(INSERT,'Searching for isotopes with '+Select_MT.get()+' reaction...\n')
+    logTxtAndPrint('Searching for isotopes with %s reaction...'%(mem.Select_MT.get()))
 
     mem.preCheckedFiles=[]
     if mem.Select_MT.get() == 'absorption':
@@ -1592,7 +1613,7 @@ def master_list(tab):
     for i in mem.reactionsDict[mem.periodicTableTabs[whichTab][0]][mem.Select_MT.get()]:
         mem.preCheckedFiles.append(i[1])
 
-    mem.logText.insert(INSERT,'%s isotopes found\n'%(str(len(mem.preCheckedFiles))))
+    logTxtAndPrint('%i isotopes found for %s.\n'%(len(mem.preCheckedFiles), mem.Select_MT.get()))
 
     status = 0
     tally = 0
@@ -1608,12 +1629,8 @@ def master_list(tab):
     for i, file in enumerate(mem.preCheckedFiles):
         start = time.time()
         popupText.set('Analyzing file %i/%i with %s'%(i+1, len(mem.preCheckedFiles),mem.Select_MT.get()))
-        # popup_lab2 = Label(popup, text='Analyzing file '+str(i+1)+'/'+str(len(mem.preCheckedFiles))+' with '+mem.Select_MT.get()+' reaction.', width=50)
-        # popup_lab2.grid(row=2, column=0)
+
         popup.update()
-        # tally+=1
-        # status+=1
-        # end = time.time()
         isotope = mem.fileDict_all[whichTab][file]
         mem.element = isotope.split('-')[0]
         # This is probably a good place to call another function that assimilates all of the radioactive decay data into a large data structure
@@ -1647,17 +1664,17 @@ def master_list(tab):
 
         else:
             with open(file, 'r') as f:
-                lines = f.readlines()
+                mem.lines = f.readlines()
 
-            if lines[1].split()[4] == '-1':
+            if mem.lines[1].split()[4] == '-1':
                 if mem.Select_MT.get() =='absorption':
-                     gTot = makeMultiGroup(lines, 3,1)
-                     gSca = makeMultiGroup(lines, 3,2)
+                     gTot = makeMultiGroup(mem.lines, 3,1)
+                     gSca = makeMultiGroup(mem.lines, 3,2)
                      x = np.array(gTot.eBins_n)
                      y = np.array(gTot.xs) - np.array(gSca.xs)
 
                 else:
-                     g = makeMultiGroup(lines, 3,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
+                     g = makeMultiGroup(mem.lines, 3,mtdic2.keys()[mtdic2.values().index(mem.Select_MT.get())])
                      x = np.array(g.eBins_n)
                      y = np.array(g.xs)
 
@@ -1746,20 +1763,20 @@ def master_list(tab):
 
     mem.decayTypeDict['Half Life'] = mem.tHalfDict
     popup.destroy()
-    mem.logText.insert(INSERT, 'Analysis complete.\n')
+    # mem.logText.insert(INSERT, 'Analysis complete.\n')
+    logTxtAndPrint('Analysis complete.\n')
 
     analysisType = 'decay' if mem.Select_MT.get() == 'radioactive_decay' else 'xs'
     displayAnalysis()
 
 def getDecayUnits(d):
+    # convert seconds to hrs, days, months, years
     for k,v in mem.halfLifeScale.iteritems():
         if d >= v[0] and d < v[1]:
             if k == 'sec':
                 return d, k
             else:
                 return d/v[0], k
-
-
 
 
 def displayAnalysis(event=None):
@@ -1802,7 +1819,7 @@ def displayAnalysis(event=None):
                 mem.resultsText.insert(INSERT, '%4i %10s %15.3e %15.3e\n'%(i, r[0], r[1], r[2]))
 
 
-    if mem.Select_MT.get() == 'xs':
+    else:# mem.Select_MT.get() == 'xs':
         xs_list = [mem.thermalDict, mem.fissionDict, mem.fusionDict, mem.eUserDict]
         xs_listS = ['thermalDictSorted', 'fissionDictSorted', 'fusionDictSorted', 'eUserDictSorted']
         e_list  = ['thermal', 'fiss', 'fus', 'user']
@@ -1828,7 +1845,11 @@ def displayAnalysis(event=None):
 #===========================================================
 #   Process all raw ENDF files with NJOY
 #===========================================================
-def run_njoy(*args):
+def run_njoy(root):
+
+    def setReprocess(i):
+        reprocess.set(i)
+        priorProcess.destroy()
 
     def NJOY(file):
         with open(file, 'r') as f:
@@ -1872,34 +1893,91 @@ def run_njoy(*args):
         f.write("stop\n")
         f.close()
         os.chdir('./working')
-        os.system('./njoy < njoy.in')
+        os.system('./njoy < njoy.in | tee -a %s'%(logFile))
         os.system('mv tape22 '+file.split('/')[-1])
         os.system('mv tape23 multigroup/'+file.split('/')[-1])
         os.chdir('../')
         os.system('pwd')
 
     processList = []
+    reprocess = IntVar()
+    reprocess.set(0)
+
     for key,value in mem.downloadList.iteritems():
         if value.get()==1 and key!='ver_xRay':
             processList.append(key)
     if not os.path.isdir('./working/multigroup'):
         os.mkdir('./working/multigroup')
+
+    start = time.time()
+
     for value in processList:
         newValue = dirDict2[value][mem.particle.get()]
         checkDir = './'+newValue+'/*.txt'
         myDir = './'+newValue+'/'
-        if os.path.isdir('./'+newValue):
-            if not os.path.isdir('./'+newValue+'/multigroup'):
-                os.mkdir('./'+newValue+'/multigroup')
+        logFile = 'njoy_%s.log'%(value.replace('/','_').replace('-','_'))
+        if not os.path.isfile(logFile):
+            os.system('touch ./working/%s'%(logFile))
+
+        files = glob(checkDir)
+        with open(files[0],'r') as f:
+            line = f.readline()
+
+        if 'NJOY processed' in line:
+        # if os.path.isdir('./'+newValue+'/multigroup'):
+            priorProcess = Toplevel()
+            priorProcess.geometry('+300+200')
+            pdl_text1 = '%s has already been processed with NJOY.\nProcess again and overwrite?'%(newValue)
+            pdl_label1 = Label(priorProcess, text=pdl_text1, justify='left')
+            pdl_label1.grid(row=0, column=0, columnspan=2)
+            yes_btn = Button(priorProcess, text='Yes, process and overwrite', command = lambda dlVar = 1: setReprocess(dlVar))
+            no_btn = Button(priorProcess, text='No, keep current NJOY-processed files', command = lambda dlVar = 0: setReprocess(dlVar))
+            yes_btn.grid(row=1, column=0)
+            no_btn.grid(row=1, column=1)
+            # wait for user feedback
+            root.wait_window(priorProcess)
+            if reprocess.get()==0:
+                continue
+
+
+        if reprocess.get() ==1:
+            addMe(root, processOnly=True)
+            os.mkdir('./'+newValue+'/multigroup')
             files = glob(checkDir)
+            # mem.logText.insert(INSERT, 'NJOY is starting to process %s\n'%(value))
+            logTxtAndPrint('NJOY is starting to process %s.\n'%(value))
             for file in files:
                 if options.verbose: print 'NJOY working on %s'%(file)
                 NJOY(file)
 
+            end = time.time()
             os.system('mv ./working/*.txt '+myDir)
             os.system('mv ./working/multigroup/*.txt '+myDir+'/multigroup')
+            tNJOY = (end - start)/60.
+            logTxtAndPrint('NJOY processing of %s complete.\n\n'%(value))
+
+        elif os.path.isdir('./'+newValue):
+            if not os.path.isdir('./'+newValue+'/multigroup'):
+                os.mkdir('./'+newValue+'/multigroup')
+            logTxtAndPrint('NJOY is starting to process %s.\n'%(value))
+            files = glob(checkDir)
+            for file in files:
+                if options.verbose: print 'NJOY working on %s'%(file)
+                NJOY(file)
+            end = time.time()
+            os.system('mv ./working/*.txt '+myDir)
+            os.system('mv ./working/multigroup/*.txt '+myDir+'/multigroup')
+            tNJOY = (end - start)/60.
+            logTxtAndPrint('NJOY processing of %s complete\n\n'%(value))
         else:
             pass
+    if value==processList[-1]:
+        logTxtAndPrint('Loading the %s library...\n'%(value))
+        load = np.sort(nndcDict.keys()).tolist().index(value)
+        mem.verSelect.set(load)
+        update_files()
+    sys.stdout = sys.__stdout__
+
 
 #===========================================================
 #   Save results of rank order analysis to file
@@ -1949,7 +2027,7 @@ def saveText(*args):
     with open(outFileName,'a') as f:
         np.savetxt(f,mem.all, delimiter="", fmt="%-18s")
     f.close()
-    mem.logText.insert(INSERT, 'Analysis results written to file '+outFileName+'\n')
+    logTxtAndPrint('Analysis results written to file %s.\n'%(outFileName))
 
 def reset():
     for ver in nndcDict.keys():
@@ -1977,10 +2055,8 @@ def clearAll(event=None):
     pl.close('all')
     mem.resultsText.delete('1.0', END)
     mem.logText.delete('1.0', END)
-    mem.logText.insert(INSERT, 'Plots cleared \n')
+    logTxtAndPrint('Plots cleared.\n')
     mem.batchFile = None
-    # mem.decaySummaryEnergy = od()
-    # mem.decaySummaryIntensity = od()
 
 def makeMixList(*args):
     master_list(mem.tab02)
@@ -1995,7 +2071,6 @@ def makeMixList(*args):
         mem.isoLabel = Label(mem.tab2_frameL, textvariable=mem.isoLabelVar,bg='aliceBlue')
 
         mem.Select_isotope_opt = makeAlphabetButton(mem.tab2_frameL,mem.elementsIsotopesDict, row, mem.Select_isotope,mem.isotopeList,mem.isoLabelVar,mem.weightEntryVar)
-
 
         mem.weightEntry.grid(column=0, row=row, padx=3, pady=3)
 
@@ -2314,9 +2389,9 @@ def makeWidgets(root):
     mem.selectAll_btn.grid(row=1, column=1)
     mem.reset = Button(mem.download_frame,text='Deselect All',command=reset,font=mem.HDG1)
     mem.reset.grid(row=1, column=2)
-    mem.get = Button(mem.download_frame,text='Download Now',command=addMe,font=mem.HDG1)
+    mem.get = Button(mem.download_frame,text='Download Now',command=lambda root=root: addMe(root),font=mem.HDG1)
     mem.get.grid(row=1, column=3)
-    mem.njoy = Button(mem.download_frame,text='Process with NJOY',command=run_njoy,font=mem.HDG1)
+    mem.njoy = Button(mem.download_frame,text='Process with NJOY',command=lambda root=root: run_njoy(root),font=mem.HDG1)
     mem.njoy.grid(row=1, column=4)
     mem.njoy_temp = DoubleVar()
     mem.njoy_temp.set(300.)
@@ -2345,7 +2420,7 @@ def makeWidgets(root):
     particles = ['neutrons','x-rays']
     for j, ver in enumerate(particles):
         mem.particleSelect[ver] = Radiobutton(mem.version_frame,variable=mem.particle,text=ver,
-           value=j, font=mem.HDG1)
+           value=j, font=mem.HDG1, command=update_files)
         mem.particleSelect[ver].grid(row=1,column=i+1)
         i+=1
 
@@ -2529,7 +2604,8 @@ def runBatch():
 
     lines.pop(0)
     mem.logText.delete('1.0', END)
-    mem.logText.insert(INSERT, 'Batch processing: %s\n'%(batchFile))
+    # mem.logText.insert(INSERT, 'Batch processing: %s\n'%(batchFile))
+    logTxtAndPrint('Batch processing: %s\n'%(batchFile))
 
     saveFlag_master = flag_pOrM_master = allFlag_master = False
     saveFlag = flag_pOrM = allFlag = False
@@ -2605,6 +2681,10 @@ def runBatch():
 
 
 def linkNjoy():
+    if not os.path.isdir('working'):
+        os.mkdir('working')
+    else:
+        pass
     if not os.path.isfile('./working/njoy') and not os.path.islink('./working/njoy'):
         if not options.njoyPath:
             print '\n***Note: NJOY2016 is required to process raw ENDF files'
@@ -2615,17 +2695,41 @@ def linkNjoy():
             print 'NJOY soft link created'
         return
 
+
+def logTxtAndPrint(s):
+    s = s.encode('utf-8')
+    mem.logText.insert(END, s)
+    # UNIX can't print unicode characters to the terminal? so try this:
+
+    if options.log:
+        try:
+            Log(s)
+        except:
+            pass
+    elif options.verbose:
+        print s.strip()
+    else:
+        pass
+
 def main():
-    print "                    _______  ______    _    _   _ "
-    print "                   | ____\ \/ / ___|  / \  | \ | |"
-    print "                   |  _|  \  /\___ \ / _ \ |  \| |"
-    print "                   | |___ /  \ ___) / ___ \| |\  |"
-    print "                   |_____/_/\_\____/_/   \_\_| \_|"
-    print "\n-- The (E)NDF (C)ross (S)ection (An)alysis and visualization appication --\n"
-    print "                             Created by:"
-    print "                    H. Omar Wooten, PhD, DABR"
-    print "                          hasani@lanl.gov"
-    print "            Copyright Los Alamos National Laboratory, 2018  "
+    if options.log:
+        if os.path.isfile('./exsan.log'):
+            sp.check_call(['rm', './exsan.log'])
+        # sys.stdout = Log()
+    else:
+        sys.stdout = sys.__stdout__
+    banner = "                    _______  ______    _    _   _ \n"
+    banner +="                   | ____\ \/ / ___|  / \  | \ | |\n"
+    banner +="                   |  _|  \  /\___ \ / _ \ |  \| |\n"
+    banner +="                   | |___ /  \ ___) / ___ \| |\  |\n"
+    banner +="                   |_____/_/\_\____/_/   \_\_| \_|\n"
+    banner +="\n-- The (E)NDF (C)ross (S)ection (An)alysis and visualization appication --\n"
+    banner +="                             Created by:\n"
+    banner +="                    H. Omar Wooten, PhD, DABR\n"
+    banner +="                          hasani@lanl.gov\n"
+    banner +="            Copyright Los Alamos National Laboratory, 2018 \n"
+    banner +="        Los Alamos National Laboratory Computer Code LA-CC-19-002\n"
+    print banner
     root = Tk()
     root.title('EXSAN 1.0')
     mem.scale_root = 0.95
