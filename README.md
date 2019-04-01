@@ -47,12 +47,16 @@ make test
 
 **4. View EXSAN's help menu**
 
-`python exsan.py -h`
+```
+python exsan.py -h
+```
 One of the options, `-n`, lets you tell EXSAN where the NJOY2016 executable file is located (i.e., provide the absolute path to the NJOY2016 executable)
 
 **5. Launch EXSAN and specify the NJOY2016 executable absolute path**
 
-`python exsan.py -n /Absolute/Path/To/NJOY2016/bin/njoy
+```
+python exsan.py -n /Absolute/Path/To/NJOY2016/bin/njoy
+```
 
 
 ### Tutorial
