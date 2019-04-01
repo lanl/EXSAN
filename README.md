@@ -45,13 +45,13 @@ make
 make test
 ```
 
-**4. Create a softlink for the NJOY2016 executable in the `EXSAN/working` subdirectory and name it `njoy`.**
+**4. View EXSAN's help menu**
+`python exsan.py -h`
+One of the options, `-n`, lets you tell EXSAN where the NJOY2016 executable file is located (i.e., provide the absolute path to the NJOY2016 executable)
 
-For example:
-```
-cd EXSAN/working
-ln -s Path_to_NJOY/NJOY2016/bin/njoy njoy
-```
+**5. Launch EXSAN and specify the NJOY2016 executable absolute path**
+`python exsan.py -n /Absolute/Path/To/NJOY2016/bin/njoy
+
 
 ### Tutorial
 After you have NJOY installed and linked, this [tutorial](https://docs.google.com/presentation/d/1P2XkV6NQazMvSrXv0gHJSfl8rgEkq9fNbID7oCnMgA8/edit?usp=sharing) will walk you through how to use the main features of EXSAN.
