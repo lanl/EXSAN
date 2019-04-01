@@ -44,6 +44,8 @@ make
 # Test NJOY1
 make test
 ```
+Make note of the absolute path for the NJOY2016 executable, as this will be needed in the next steps.
+
 
 **4. View EXSAN's help menu**
 
