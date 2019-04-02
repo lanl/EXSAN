@@ -708,10 +708,28 @@ def update_files(event=None):
         mem.particle.set(0)
         fileDirectory = dirDict2[np.sort(dirDict2.keys())[mem.verSelect.get()]][0]
 
+    particles = []
+    for vi in dirDict2[sorted(dirDict2.keys())[mem.verSelect.get()]]:
+        if 'parsed' in vi or 'neutrons' in vi:
+            particles.append('n')
+        if 'photo' in vi:
+            particles.append('x')
+
+    if 'n' in particles:
+        mem.particleSelect['neutrons'].configure(state='normal')
+    else:
+        mem.particleSelect['neutrons'].configure(state='disabled')
+
+    if 'x' in particles:
+        mem.particleSelect['x-rays'].configure(state='normal')
+    else:
+        mem.particleSelect['x-rays'].configure(state='disabled')
+
     fileDirs = {}
     fileDirs[fileDirectory] = mem.tab11
-    fileDirs[fileDirectory+'/multigroup'] = mem.tab12
-    fileDirs['/'.join(fileDirectory.split('/')[:-1])+'/decay'] = mem.tab13
+    if mem.particle.get() == 0:
+        fileDirs[fileDirectory+'/multigroup'] = mem.tab12
+        fileDirs['/'.join(fileDirectory.split('/')[:-1])+'/decay'] = mem.tab13
     mem.allListMaster = {}
     mem.allListMasterMaster = {}
 
@@ -1532,6 +1550,7 @@ def fileChecker(root):
                     logTxtAndPrint('%i files detected in %s subdirectory.\n'%(len(files), value))
                     numFilesFound += len(files)
                     mem.verSelect.set(i)
+                    mem.verSelectRad[k].configure(state='normal')
 
     if numFilesFound ==0:
         logTxtAndPrint('Must download ENDF files first.\n')
@@ -2413,14 +2432,14 @@ def makeWidgets(root):
     mem.verSelectRad = {}
     for i, ver in enumerate(np.sort(nndcDict.keys())):
         mem.verSelectRad[ver] = Radiobutton(mem.version_frame, variable=mem.verSelect,text=ver,
-            value=i, command=update_files, font=mem.HDG1)
+            value=i, command=update_files, font=mem.HDG1, state='disabled')
         mem.verSelectRad[ver].grid(row=1, column=i, padx=1, pady=1)
     mem.particle = IntVar()
     mem.particleSelect = {}
     particles = ['neutrons','x-rays']
     for j, ver in enumerate(particles):
         mem.particleSelect[ver] = Radiobutton(mem.version_frame,variable=mem.particle,text=ver,
-           value=j, font=mem.HDG1, command=update_files)
+           value=j, font=mem.HDG1, command=update_files, state='disabled')
         mem.particleSelect[ver].grid(row=1,column=i+1)
         i+=1
 
