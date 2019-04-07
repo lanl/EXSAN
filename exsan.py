@@ -1093,6 +1093,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
         fig = pl.figure(1)
         figImg = fig.set_size_inches(15., 15.)
         ax1 = pl.subplot2grid((2, 4), (0, 0), colspan=2)
+
     else:
         fig = pl.figure(1)
         figImg = fig.set_size_inches(15., 7.5)
@@ -2603,19 +2604,20 @@ def runBatch():
         batchFile = tkFileDialog.askopenfilename()
     else:
         batchFile = mem.batchFile
-    # with open(tkFileDialog.askopenfilename()) as f:
+
     with open(batchFile,'r') as f:
         lines = f.readlines()
     f.close()
     commentLines = [i for (i,l) in enumerate(lines) if l[0]=='#']
     for cl in commentLines[::-1]:
         lines.pop(cl)
-    # exec(lines[0])
-    i=0
-    tmp = {}
-    for k,v in sorted(dirDict2.iteritems()):
-        tmp[k]=i; i+=1
 
+    tmp = {}
+    for i, (k,v) in enumerate(sorted(dirDict2.iteritems())):
+        tmp[k]=i
+
+    st()
+    
     if lines[0].strip() in sorted(dirDict2.keys()):
         if not mem.verSelect.get()==tmp[lines[0].strip()]:
             mem.verSelect.set(tmp[lines[0].strip()])
@@ -2648,8 +2650,11 @@ def runBatch():
         for key in sorted(mem.allListMasterMaster):
             for key1 in sorted(mem.allListMasterMaster[key]):
                 print key1
-                getInfo2(mem.allListMasterMaster[key][key1], flag_pOrM_master, allFlag_master)
-                plotMe2(None, allFlag_master, saveFlag_master)
+                try:
+                    getInfo2(mem.allListMasterMaster[key][key1], flag_pOrM_master, allFlag_master)
+                    plotMe2(None, allFlag_master, saveFlag_master)
+                except:
+                    pass
                 clearAll()
     elif 'rank' in lines[0]:
         print 'rank mode'
