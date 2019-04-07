@@ -1266,7 +1266,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
         name = []
         for p in mem.plotTitles:
             name.append(p.replace(' ','_'))
-        name = '.'.join(name)
+        name = '__'.join(name)
         if len(np.unique(isotopes)) == 1 and len(isotopes) >1:
             isotope = np.unique(isotopes)[0]
             el = isotope.split('-')[0]
@@ -2609,7 +2609,6 @@ def makeWidgets(root):
 
 
 def runBatch():
-
     def allXS():
         from matplotlib.backends.backend_pdf import PdfPages as savePDF
         mem.savePDF = savePDF
@@ -2625,7 +2624,6 @@ def runBatch():
                     pass
                 clearAll()
 
-
     if mem.batchFile == None:
         batchFile = tkFileDialog.askopenfilename()
     else:
@@ -2637,7 +2635,6 @@ def runBatch():
         for line in tmp:
             lines.append(line.strip())
 
-    f.close()
     commentLines = [i for (i,l) in enumerate(lines) if l[0]=='#']
     for cl in commentLines[::-1]:
         lines.pop(cl)
@@ -2671,6 +2668,14 @@ def runBatch():
         if not mem.verSelect.get()==tmp[k]:
             mem.verSelect.set(tmp[k])
             update_files()
+
+        logTxtAndPrint('Writing out all available isotopes and reactions for %s.'%(lib))
+        with open('zz_all_%s.txt'%(lib.replace('/','_').replace('-','_')), 'w') as f:
+            for k_el, v_iso in sorted(mem.allListMasterMaster.iteritems()):
+                for iso, xs in sorted(v_iso.iteritems()):
+                    for item in sorted(xs):
+                        f.write('%s\n'%item)
+
         mem.Select_E1.set(libDict[k]['E'])
         for xsList in libDict[k]['save']:
             for xs in xsList:
@@ -2686,10 +2691,12 @@ def runBatch():
                     el = xs.split('-')[0]
                     iso = xs.split()[0]
                     xs = mem.allListMasterMaster[el][iso]
+                    logTxtAndPrint('batch analysis: %s %s'%(lib, xs))
                     getInfo2(xs, flag_pOrM, allFlag)
                     continue
                 else:
                     xs = ' '.join(xs.split()[0:2])
+                    logTxtAndPrint('batch analysis: %s %s'%(lib, xs))
                     getInfo2([xs], flag_pOrM, allFlag)
 
             from matplotlib.backends.backend_pdf import PdfPages as savePDF
@@ -2697,95 +2704,138 @@ def runBatch():
             plotMe2(None, allFlag, saveFlag)
             clearAll()
             mem.Select_E1.set(libDict[k]['E'])
-
-    st()
-
-    if lines[0].strip() in sorted(dirDict2.keys()):
-        if not mem.verSelect.get()==tmp[lines[0].strip()]:
-            mem.verSelect.set(tmp[lines[0].strip()])
-            update_files()
-
-    lines.pop(0)
-    mem.logText.delete('1.0', END)
-    # mem.logText.insert(INSERT, 'Batch processing: %s\n'%(batchFile))
-    logTxtAndPrint('Batch processing: %s\n'%(batchFile))
-
-    saveFlag_master = flag_pOrM_master = allFlag_master = False
-    saveFlag = flag_pOrM = allFlag = False
-    if 'E' in lines[0]:
-        mem.Select_E1.set(lines[0].split('=')[1].split()[0])
-        popLast = True
-    if 'save' or 'all' in lines[0]:
-        from matplotlib.backends.backend_pdf import PdfPages as savePDF
-        mem.savePDF = savePDF
-        saveFlag_master = True
-        print 'save master'
-        popLast = True
-    if 'm' in lines[0]:
-        flag_pOrM_master = True
-        mem.note1.select(1)
-        print 'pOrM master'
-        popLast = True
-
-    if 'all' in lines[0]:
-        allFlag = True
-        for key in sorted(mem.allListMasterMaster):
-            for key1 in sorted(mem.allListMasterMaster[key]):
-                print key1
-                try:
-                    getInfo2(mem.allListMasterMaster[key][key1], flag_pOrM_master, allFlag_master)
-                    plotMe2(None, allFlag_master, saveFlag_master)
-                except:
-                    pass
-                clearAll()
-    elif 'rank' in lines[0]:
-        print 'rank mode'
-        lines.pop(0)
-        for line in lines:
-            if line.split()[0] in list(mem.tmpList):
-                mem.Select_MT.set(line.split()[0])
-                master_list(mem.note1.index("current"))
-                saveText()
-
-    else:
-        if popLast:
-            lines.pop(0)
-        for line in lines:
-            if line.split()[0] in mem.isotopesMTdict.keys() and line.split()[1] in mem.isotopesMTdict[line.split()[0]]:
-                if not flag_pOrM_master:
-                    if 'm' in line.split():
-                        flag_pOrM = True
-                        mem.note1.select(1)
-                    else:
-                        flag_pOrM = False
-                        mem.note1.select(0)
-                else:
-                    flag_pOrM = True
-
-                if not saveFlag_master:
-                    if 'save' in line.split():
-                        saveFlag = True
-                    else:
-                        saveFlag = False
-                else:
-                    saveFlag = True
-
-                if 'all' in line.split():
-                    allFlag = True
-                    line = mem.allListMaster[line.split()[0]]
-                else:
-                    allFlag = False
-                    line = [' '.join(line.split()[:2])]
-                getInfo2(line, flag_pOrM, allFlag)
-                # plotMe2(None, allFlag, saveFlag)
-                # clearAll()
-            else:
-                print line.split()[0], 'not found'
-                continue
-        plotMe2(None, allFlag, saveFlag)
-        # clearAll()
+        tex()
 
 
+def tex():
+    '''
+    This module writes a LaTeX file that assembles all of the figures
+    from a batch run, and adds an alphabetical index with hyperlinks
+    at the end.
+
+    Helpful links:
+        https://es.overleaf.com/learn/latex/hyperlinks
+        https://www.overleaf.com/learn/latex/Indices
+        https://texblog.org/2007/11/07/headerfooter-in-latex-with-fancyhdr/
+    '''
+
+    def addBody(s):
+        '''
+        Add lines for an individual figure including caption, index
+        labels, and and a hyperlink to the Index. This is useful for
+        very large files!
+        '''
+        contents = s.split('/')[-1].split('.')[0].split('__')
+        label = '.'.join(contents)
+        contentsCaption = r''''''
+        indexList = []
+        print s
+        for c in contents:
+            iso, xs = c.split('_')[0:2]
+            if c.split('_') == 3:
+                mg = c.split('_')[-1]
+            el, mass = iso.split('-')
+            contentsCaption += \
+            r'''\textsuperscript{%s}%s %s, '''%(mass, el, xs)
+            indexList.append(r'''%s %s'''%(iso, xs))
+
+        b = \
+        r'''
+        \begin{landscape}
+        \begin{centering}
+        \begin{figure}
+          \includegraphics[width=0.7\linewidth]{%s}
+          \caption{%s}'''%(s, contentsCaption)
+
+        c = r''''''
+        for item in indexList:
+            c += \
+            r'''
+            \index{%s}'''%(item)
+
+        b += c
+        b += \
+        r'''
+          \label{fig:%s}
+        \hyperref[index]{index}
+        \end{figure}
+        \end{centering}
+        \end{landscape}
+        '''%(label)
+        return b
+
+
+    #######################################################
+    # list of figures output by EXSAN's batch analysis
+    #######################################################
+    figs = glob('./figs/*')
+
+
+    #######################################################
+    # Top of the tex file
+    #######################################################
+    top =\
+    r'''
+    \documentclass{article}
+    \usepackage{graphicx}
+    \usepackage{pdflscape}
+    \usepackage[margin=0.8in]{geometry}
+    \usepackage{fancyhdr}
+    \usepackage{imakeidx}
+    \usepackage{hyperref}
+    \hypersetup{
+        colorlinks=true,
+        linkcolor=blue,
+        filecolor=magenta,
+        urlcolor=cyan
+    }
+    \usepackage[utf8]{inputenc}
+    \usepackage[T1]{fontenc}
+    \usepackage{imakeidx}
+    \usepackage[mmddyyyy]{datetime}
+    \fancyhead{}
+    \fancyfoot{}
+    \fancyhead[CO,CE]{---    Compiled by EXSAN on \today    ---}
+    \fancyfoot[C]{EXSAN}
+    \fancyfoot[R] {\thepage}
+    \makeindex[columns=2, title={Alphabetical Index\label{index}}]
+    \begin{document}
+    \title{EXSAN Cross Sections}
+    \maketitle
+    \pagestyle{fancy}
+    \thispagestyle{fancy}
+    '''
+
+    #######################################################
+    # Bottom of the tex file
+    #######################################################
+    tail = \
+    r'''
+    \printindex
+    \end{document}
+    '''
+
+    #######################################################
+    # Body of the tex file, one for each figure
+    #######################################################
+    body = r''''''
+    for fig in figs:
+        body += addBody(fig)
+
+    #######################################################
+    # Make and write the entire tex file and PDF
+    #######################################################
+    tex = top + body + tail
+
+    with open('tex.tex', 'w') as f:
+        f.write(tex)
+    sp.check_call(['pdflatex', 'tex.tex'])
+
+
+
+#######################################################
+# create a symlink for the NJOY2016 executable file
+#######################################################
 def linkNjoy():
     if not os.path.isdir('working'):
         os.mkdir('working')
@@ -2801,7 +2851,9 @@ def linkNjoy():
             print 'NJOY soft link created'
         return
 
-
+#######################################################
+# Update the log file and log Text area of the GUI
+#######################################################
 def logTxtAndPrint(s):
     s = s.encode('utf-8')
     mem.logText.insert(END, s)

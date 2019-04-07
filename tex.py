@@ -1,71 +1,72 @@
 from glob import glob
 import subprocess as sp
-from pdb import set_trace as st
-
-
+# from pdb import set_trace as st
 '''
+This module writes a LaTeX file that includes all of the figures
+from a batch run, and adds an alphabetical index with hyperlinks
+at the end.
+
 Helpful links:
     https://es.overleaf.com/learn/latex/hyperlinks
     https://www.overleaf.com/learn/latex/Indices
+    https://texblog.org/2007/11/07/headerfooter-in-latex-with-fancyhdr/
 '''
 
 def addBody(s):
-    isotope = s.split('/')[-1].split('_')[0]
-    el, mass = isotope.split('-')
+    '''
+    Add lines for an individual figure including caption, index
+    labels, and and a hyperlink to the Index. This is useful for
+    very large files!
+    '''
+    contents = s.split('/')[-1].split('.')[0].split('__')
+    label = '.'.join(contents)
+    contentsCaption = r''''''
+    indexList = []
+    print s
+    for c in contents:
+        iso, xs = c.split('_')[0:2]
+        if c.split('_') == 3:
+            mg = c.split('_')[-1]
+        el, mass = iso.split('-')
+        contentsCaption += \
+        r'''\textsuperscript{%s}%s (%s), '''%(mass, el, xs)
+        indexList.append(r'''%s (%s)'''%(iso, xs))
+
     b = \
     r'''
-    \fancyfoot[R]{\thepage}
     \begin{landscape}
     \begin{centering}
     \begin{figure}
-      \includegraphics[width=0.9\linewidth]{%s}
-      \caption{\textsuperscript{%s}%s.}
-      \index{%s.}
+      \includegraphics[width=0.7\linewidth]{%s}
+      \caption{%s}'''%(s, contentsCaption)
+
+    c = r''''''
+    for item in indexList:
+        c += \
+        r'''
+        \index{%s}'''%(item)
+
+    b += c
+    b += \
+    r'''
       \label{fig:%s}
-      \hyperref[index]{index}
+    \hyperref[index]{index}
     \end{figure}
     \end{centering}
     \end{landscape}
-    '''%(s, mass, el, isotope, isotope)
+    '''%(label)
     return b
 
 
-
+#######################################################
+# list of figures output by EXSAN's batch analysis
+#######################################################
 figs = glob('./figs/*')
 
-'''
-\documentclass{article}
-\usepackage{graphicx}
-\usepackage{pdflscape}
-\usepackage[margin=0.8in]{geometry}
-\usepackage{fancyhdr}
-\usepackage{imakeidx}
-\makeindex[columns=3, title=Alphabetical Index]
-% Turn on the style
-\fancyhead{}
-\fancyfoot{}
-% Set the right side of the footer to be the page number
-\fancyfoot[R]{\thepage}
-\pagestyle{fancy}
 
-\begin{document}
-\title{EXSAN Cross Sections}
-\author{H. Omar Wooten, Ph.D.}
-\maketitle
-
-\begin{landscape}
-\begin{figure}
-  \includegraphics[width=\linewidth]{./figs/Li-6.pdf}
-  \caption{\index{\textsuperscript{6}Li.}}
-  \label{fig:Li-6}
-\end{figure}
-\end{landscape}
-
-
-\printindex
-\end{document}
-'''
-
+#######################################################
+# Top of the tex file
+#######################################################
 top =\
 r'''
 \documentclass{article}
@@ -84,35 +85,40 @@ r'''
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{imakeidx}
-\makeindex[columns=4, title={Alphabetical Index\label{index}}]
+\usepackage[mmddyyyy]{datetime}
 \fancyhead{}
 \fancyfoot{}
-% Set the right side of the footer to be the page number
-\fancyfoot[R]{\thepage}
-% Turn on the style
-\pagestyle{fancy}
-
+\fancyhead[CO,CE]{---    Compiled by EXSAN on \today    ---}
+\fancyfoot[C]{EXSAN}
+\fancyfoot[R] {\thepage}
+\makeindex[columns=2, title={Alphabetical Index\label{index}}]
 \begin{document}
 \title{EXSAN Cross Sections}
-\author{H. Omar Wooten, Ph.D.}
 \maketitle
+\pagestyle{fancy}
 \thispagestyle{fancy}
 '''
 
+#######################################################
+# Bottom of the tex file
+#######################################################
 tail = \
 r'''
 \printindex
 \end{document}
 '''
 
+#######################################################
+# Body of the tex file, one for each figure
+#######################################################
 body = r''''''
 for fig in figs:
     body += addBody(fig)
 
-
-
+#######################################################
+# Make and write the entire tex file and PDF
+#######################################################
 tex = top + body + tail
-# tex = head + main + foot
 
 with open('tex.tex', 'w') as f:
     f.write(tex)
