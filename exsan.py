@@ -2606,7 +2606,11 @@ def runBatch():
         batchFile = mem.batchFile
 
     with open(batchFile,'r') as f:
-        lines = f.readlines()
+        tmp = f.readlines()
+        lines = []
+        for line in tmp:
+            lines.append(line.strip())
+
     f.close()
     commentLines = [i for (i,l) in enumerate(lines) if l[0]=='#']
     for cl in commentLines[::-1]:
@@ -2616,8 +2620,34 @@ def runBatch():
     for i, (k,v) in enumerate(sorted(dirDict2.iteritems())):
         tmp[k]=i
 
+    libDict = {}
+    for line in lines:
+        if line in dirDict2.keys():
+            lib = line
+            libDict[line] = {}
+        elif 'E=' in line or 'E =' in line:
+            libDict[lib]['E'] = float(line.split('=')[-1])
+            libDict[lib]['xs'] = []
+        else:
+            libDict[lib]['xs'].append(line)
+
+    for k,v in libDict.iteritems():
+        mem.verSelect.set(tmp[k])
+        update_files()
+        mem.Select_E1.set(libDict[k]['E'])
+        for xs in libDict[k]['xs']:
+            flag_pOrM = False
+            allFlag = False
+            if 'all' in xs.split():
+                allFlag = True
+            if 'm' in xs.split():
+                flag_pOrM_master = True
+                mem.note1.select(1)
+            xs = ' '.join(xs.split()[0:2])
+            getInfo2([xs], flag_pOrM, allFlag)
+        st()
     st()
-    
+
     if lines[0].strip() in sorted(dirDict2.keys()):
         if not mem.verSelect.get()==tmp[lines[0].strip()]:
             mem.verSelect.set(tmp[lines[0].strip()])
