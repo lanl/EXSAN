@@ -3,8 +3,18 @@ ENDF/B-VIII.0
 E=2.5e3
 H-1 total
 Li-6 total
+save
 Na-23 absorption m
 F-19 absorption
 F-19 total
 O-16 (z,gamma)
 O-16 (z,gamma) m
+save
+Pu-239 absorption
+Pu-239 (z,fission)
+Pu-239 (z,gamma)
+Pu-239 (z,n)
+Pu-239 (z,2n)
+save
+U-238 all
+save

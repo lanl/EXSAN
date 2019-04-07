@@ -1263,7 +1263,16 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
     if saveFlag==True:
         if not os.path.exists('figs'):
             os.mkdir('figs')
-        pdf = mem.savePDF('figs/'+mem.plotTitles[0][:7]+'.pdf')
+        name = []
+        for p in mem.plotTitles:
+            name.append(p.replace(' ','_'))
+        name = '.'.join(name)
+        if len(np.unique(isotopes)) == 1 and len(isotopes) >1:
+            isotope = np.unique(isotopes)[0]
+            el = isotope.split('-')[0]
+            if mem.allListMasterMaster[el][isotope]==mem.plotTitles:
+                name = '%s_All'%(isotope)
+        pdf = mem.savePDF('figs/%s.pdf'%(name))
         pdf.savefig(figImg)
         pdf.close()
     else:
@@ -2600,6 +2609,23 @@ def makeWidgets(root):
 
 
 def runBatch():
+
+    def allXS():
+        from matplotlib.backends.backend_pdf import PdfPages as savePDF
+        mem.savePDF = savePDF
+        flag_pOrM_master = allFlag_master = False
+        saveFlag_master = True
+        for key in sorted(mem.allListMasterMaster):
+            for key1 in sorted(mem.allListMasterMaster[key]):
+                print key1
+                try:
+                    getInfo2(mem.allListMasterMaster[key][key1], flag_pOrM_master, allFlag_master)
+                    plotMe2(None, allFlag_master, saveFlag_master)
+                except:
+                    pass
+                clearAll()
+
+
     if mem.batchFile == None:
         batchFile = tkFileDialog.askopenfilename()
     else:
@@ -2625,27 +2651,53 @@ def runBatch():
         if line in dirDict2.keys():
             lib = line
             libDict[line] = {}
+            libDict[lib]['save'] = []
         elif 'E=' in line or 'E =' in line:
             libDict[lib]['E'] = float(line.split('=')[-1])
             libDict[lib]['xs'] = []
+        elif line=='save':
+            libDict[lib]['save'].append(libDict[lib]['xs'])
+            libDict[lib]['xs'] = []
+        elif line =='all':
+            if not mem.verSelect.get()==tmp[k]:
+                mem.verSelect.set(tmp[k])
+                update_files()
+            allXS()
+            return None
         else:
             libDict[lib]['xs'].append(line)
 
     for k,v in libDict.iteritems():
-        mem.verSelect.set(tmp[k])
-        update_files()
+        if not mem.verSelect.get()==tmp[k]:
+            mem.verSelect.set(tmp[k])
+            update_files()
         mem.Select_E1.set(libDict[k]['E'])
-        for xs in libDict[k]['xs']:
-            flag_pOrM = False
-            allFlag = False
-            if 'all' in xs.split():
-                allFlag = True
-            if 'm' in xs.split():
-                flag_pOrM_master = True
-                mem.note1.select(1)
-            xs = ' '.join(xs.split()[0:2])
-            getInfo2([xs], flag_pOrM, allFlag)
-        st()
+        for xsList in libDict[k]['save']:
+            for xs in xsList:
+                flag_pOrM = False
+                allFlag = False
+                saveFlag = True
+                mem.note1.select(0)
+                if 'm' in xs.split():
+                    flag_pOrM = True
+                    mem.note1.select(1)
+                if 'all' in xs.split():
+                    allFlag = True
+                    el = xs.split('-')[0]
+                    iso = xs.split()[0]
+                    xs = mem.allListMasterMaster[el][iso]
+                    getInfo2(xs, flag_pOrM, allFlag)
+                    continue
+                else:
+                    xs = ' '.join(xs.split()[0:2])
+                    getInfo2([xs], flag_pOrM, allFlag)
+
+            from matplotlib.backends.backend_pdf import PdfPages as savePDF
+            mem.savePDF = savePDF
+            plotMe2(None, allFlag, saveFlag)
+            clearAll()
+            mem.Select_E1.set(libDict[k]['E'])
+
     st()
 
     if lines[0].strip() in sorted(dirDict2.keys()):
