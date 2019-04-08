@@ -36,6 +36,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as pl
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from matplotlib.font_manager import FontProperties
 import numpy as np
 import sys, os, operator
 from glob import glob
@@ -1201,6 +1202,17 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
                         cellLoc='center',
                         bbox=tableFormat)
 
+    for (row, col), cell in the_table.get_celld().items():
+        cell.set_linewidth(0)
+        if (row == 0) or (col == 0):
+            cell.set_text_props(fontproperties=FontProperties(weight='bold'))
+
+        if col==0 and row>=1:
+            colorIdx = row%len(mem.c)
+            cell._text.set_color(mem.c[row-1])
+
+
+
     the_table.auto_set_column_width([-1,-1,-1,-1,-1,-1,-1,-1])
     the_table.auto_set_font_size(True)
     the_table.scale(4,2)
@@ -1297,8 +1309,9 @@ def plotDecay():
         'e- anti-neutrinos': ['|', 60*ps, 0.5, 'violet'],
         'e- neutrinos': ['-', 60*ps, 0.5, 'slategray']}
 
-    fig = pl.figure('Radioactive Decay', figsize=(12,8))
-    ax = fig.add_subplot(111)
+    fig = pl.figure('Radioactive Decay', figsize=(15,8))
+    # ax = fig.add_subplot(111)
+    ax = pl.subplot2grid((1,2), (0, 0))
     ax.set_axisbelow(True)
 
     i = 0
@@ -1307,12 +1320,17 @@ def plotDecay():
     ms = 70
     snapData = []
     titles = []
-    minX, maxX, minY, maxY = ([] for i in range(4))
+    minX, maxX, minY, maxY, cellText, tableColors = ([] for i in range(6))
+    avgE, maxE = ({} for i in range(2))
     for k,v in mem.decaySummary.iteritems():
         if k in ['Half Life', 'Decay Modes', u'T-\xbd','isotope']:
             continue
         xData = [vi[0] for vi in v]
         yData = [vi[1] for vi in v]
+        totFrac = np.sum([j[1] for j in mem.decaySummary[k]])
+        avgE[k] = np.sum([j[0]*j[1]/totFrac for j in mem.decaySummary[k]])
+        maxE[k] = mem.decaySummary[k][-1][0]
+        cellText.append(['%s'%(k), '%.3e'%(avgE[k]), '%.3e'%(maxE[k])])
         minX.append(min(xData))
         minY.append(min(yData))
         maxX.append(max(xData))
@@ -1321,14 +1339,42 @@ def plotDecay():
         titles.append(k)
         colorIdx = i%len(mem.c)
         c = mem.c[colorIdx]
+        tableColors.append(pDict[k][3])
         pl.scatter(xData, yData, marker=pDict[k][0], s=pDict[k][1], alpha=pDict[k][2], facecolors=pDict[k][3], edgecolors='k', label=k)
 
         i += 1
 
+    # Table
+    columnText = ['Particle', 'Avg. Energy (eV)', 'Max Energy (eV)']
+    tableFormat = [1.1, 0.3, 1.0, 0.3]
+    the_table = ax.table(cellText=cellText,
+                        loc = 'right',
+                        colWidths = [0.25, 0.25, 0.25],
+                        colLabels = columnText,
+                        colLoc = 'center',
+                        rowLoc = 'center',
+                        cellLoc = 'center',
+                        bbox = tableFormat)
+
+    for (row, col), cell in the_table.get_celld().items():
+        cell.set_linewidth(0)
+        if (row == 0) or (col == 0):
+            cell.set_text_props(fontproperties=FontProperties(weight='bold', size=30))
+        if col == 0 and row >= 1:
+            colorIdx = i%len(mem.c)
+            cell._text.set_color(tableColors[row-1])
+
+    the_table.auto_set_column_width([-1, -1, -1])
+    the_table.auto_set_font_size(True)
+    the_table.scale(4,2)
+
+
+
+
     val, unit = getDecayUnits(mem.decaySummary[u'T-\xbd'][0])
     fs = 20
     fw = 'bold'
-    pl.legend(loc=3, fontsize=fs-4)
+    pl.legend(loc=3, fontsize=fs/2., markerscale=1)
     if val>1000:
         pl.title(u'%s\nT-\xbd = %.3e %s'%(mem.decaySummary['isotope'], val, unit), fontsize=fs, fontweight=fw)
     else:
