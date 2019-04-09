@@ -731,10 +731,14 @@ def update_files(event=None):
     if mem.particle.get() == 0:
         fileDirs[fileDirectory+'/multigroup'] = mem.tab12
         fileDirs['/'.join(fileDirectory.split('/')[:-1])+'/decay'] = mem.tab13
-    mem.allListMaster = {}
-    mem.allListMasterMaster = {}
+    # mem.allListMaster = {}
+    # mem.allListMasterMaster = {}
+    mem.masterTracker = {}
 
     for mem.fileDir, tab in fileDirs.iteritems():
+        mem.allListMaster = {}
+        mem.allListMasterMaster = {}
+
         decayFlag = True if 'decay' in mem.fileDir else False
 
         mem.files = glob('./'+mem.fileDir+'/*.txt')
@@ -850,6 +854,11 @@ def update_files(event=None):
         mem.azDict = {}
         for letter in az: mem.azDict[letter] = []
         for el in mem.elements: mem.azDict[el[0]].append(el)
+
+        if mem.fileDir.split('/')[-1] == 'neutrons':
+            mem.masterTracker['pointwise'] = mem.allListMasterMaster
+        else:
+            mem.masterTracker[mem.fileDir.split('/')[-1]] = mem.allListMasterMaster
 
 #===========================================================
 #   Get everything ready to plot
@@ -1120,9 +1129,17 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
                  2:"cm",
                  3:"cm^2/g"}
 
-    mem.columnText = ['','Th\n(0.025 eV)','Fiss\n(1 MeV)','Fus\n(14 MeV)',
-                  'Custom\n('+'%3.2e'%(mem.Select_E1.get())+' eV)','AvgSigma','ResIntegral',
-                  'FissSpecAvg']
+    eCust = 'N/A' if e_user == 0. else '%3.2e\n(eV)'%(e_user)
+    mem.columnText = ['',
+        r'$E_{th}$',
+        r'$E_{fiss}$',
+        r'$E_{fus}$',
+        # r'$E_{cust}$',
+        # '%3.2e eV'%(mem.Select_E1.get()),
+        eCust,
+        r'$\overline{\sigma}$',
+        r'$\int{\sigma_{res}}$',
+        r'$\overline{\phi_{fiss}(E)}$']
 
 
     lineWidth = 2
@@ -1179,8 +1196,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
 
         else:
             ax1.loglog(x,y, linestyle=l, c=mem.c[colorIdx],lw=lineWidth, label=str(i+1)+'. '+title)
-        mem.cell_text.append(['%-2s'%(i+1),'%5.3e'%(therm),'%5.3e'%(fiss),'%5.3e'%(fus),'%5.3e'%(user),
-                          '%5.3e'%(avgSigma),'%5.3e'%(resInt), '%5.3e'%(fissSpecAvg)])
+        mem.cell_text.append(['%-2s'%(i+1),'%5.3e'%(therm),'%5.3e'%(fiss),'%5.3e'%(fus),'%5.3e'%(user), '%5.3e'%(avgSigma),'%5.3e'%(resInt), '%5.3e'%(fissSpecAvg)])
         mem.rowText.append(title)
 
         # cursor snap
@@ -1192,7 +1208,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
                  3:"Mean free path (cm^2/g)"}
 
 
-    tableFormat = [1.1, 0.0, 1.2, 1.0] if allFlag else [1.1, 0.0, 1.35, 0.75]
+    tableFormat = [1.05, 0.0, 1.2, 1.0] if allFlag else [1.1, 1.-0.06*(len(mem.plotTitles)+1), 1.35, 0.06*(len(mem.plotTitles)+1)]
     the_table = ax1.table(cellText=mem.cell_text,
                         loc='right',
                         colWidths=[0.15,0.6,0.5,0.5,0.6,0.5,0.5,0.6],
@@ -1204,18 +1220,20 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
 
     for (row, col), cell in the_table.get_celld().items():
         cell.set_linewidth(0)
-        if (row == 0) or (col == 0):
+        if (col == 0):
             cell.set_text_props(fontproperties=FontProperties(weight='bold'))
+        if row == 0:
+            cell._text.set_fontsize(14)
 
         if col==0 and row>=1:
             colorIdx = row%len(mem.c)
             cell._text.set_color(mem.c[row-1])
 
 
-
     the_table.auto_set_column_width([-1,-1,-1,-1,-1,-1,-1,-1])
-    the_table.auto_set_font_size(True)
-    the_table.scale(4,2)
+    the_table.auto_set_font_size(False)
+    # the_table.set_fontsize(18)
+    the_table.scale(1, 0.25)
     ax1.set_xlim([0.6*np.array(mem.minimumX).min(),1.4*np.array(mem.maximumX).max()])
     ax1.set_ylim([0.6*np.array(mem.minimumY).min(),1.4*np.array(mem.maximumY).max()])
     ax1.grid(which='both', linestyle='--',color='0.8')
@@ -1224,8 +1242,11 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
     ax1.set_ylabel(unitsDict[mem.microMacro.get()], fontsize=legendFontSize)
     ax1.set_xlabel("Energy (eV)", fontsize=legendFontSize)
     ax1.set_title(unitsDict[mem.microMacro.get()], fontsize=legendFontSize+2)
-    ax1.legend(loc=3, prop={'size':legendFontSize})
     ax1.tick_params(labelsize=legendFontSize-2)
+    if len(mem.plotTitles) >5:
+        ax1.legend(loc=3, prop={'size':legendFontSize/1.5})
+    else:
+        ax1.legend(loc=3, prop={'size':legendFontSize})
 
     # Create pie charts of cross section values at each energy only if plotting all x-sects (allFlag=True)
     pieList = [mem.plotTherm, mem.plotFiss, mem.plotFus, mem.plotUser]
@@ -2655,20 +2676,43 @@ def makeWidgets(root):
 
 
 def runBatch():
-    def allXS():
+    def allXS(plotType):
         from matplotlib.backends.backend_pdf import PdfPages as savePDF
         mem.savePDF = savePDF
-        flag_pOrM_master = allFlag_master = False
+        flag_pOrM_master = False
         saveFlag_master = True
-        for key in sorted(mem.allListMasterMaster):
-            for key1 in sorted(mem.allListMasterMaster[key]):
-                print key1
-                try:
-                    getInfo2(mem.allListMasterMaster[key][key1], flag_pOrM_master, allFlag_master)
-                    plotMe2(None, allFlag_master, saveFlag_master)
-                except:
-                    pass
-                clearAll()
+        allFlag_master = True
+        loopList = []
+        if plotType == 'decay':
+            mem.note1.select(2)
+            for k,v in sorted(mem.masterTracker[plotType].iteritems()): loopList.append(sorted(v.keys()))
+            loopList = [item for sublist in loopList for item in subliss]
+            st()
+
+        elif plotType =='pointwise' or plotType =='multigroup':
+            mem.note1.select(0)
+            if plotType=='multigroup':
+                flag_pOrM_master = True
+                mem.note1.select(1)
+            for k0, v0 in sorted(mem.masterTracker[plotType].iteritems()):
+                for k1, v1 in sorted(mem.masterTracker[plotType][k0].iteritems()):
+                    try:
+                        getInfo2(v1, flag_pOrM_master, allFlag_master)
+                        plotMe2(None, allFlag_master, saveFlag_master)
+                    except:
+                        pass
+                    clearAll()
+
+
+        # for key in sorted(mem.allListMasterMaster):
+        #     for key1 in sorted(mem.allListMasterMaster[key]):
+        #         print key1
+        #         try:
+        #             getInfo2(mem.allListMasterMaster[key][key1], flag_pOrM_master, allFlag_master)
+        #             plotMe2(None, allFlag_master, saveFlag_master)
+        #         except:
+        #             pass
+        #         clearAll()
 
     if mem.batchFile == None:
         batchFile = tkFileDialog.askopenfilename()
@@ -2701,11 +2745,13 @@ def runBatch():
         elif line=='save':
             libDict[lib]['save'].append(libDict[lib]['xs'])
             libDict[lib]['xs'] = []
-        elif line =='all':
+        elif 'all' in line:
             if not mem.verSelect.get()==tmp[k]:
                 mem.verSelect.set(tmp[k])
                 update_files()
-            allXS()
+            type = line.split()[-1]
+            allXS(type)
+            tex()
             return None
         else:
             libDict[lib]['xs'].append(line)

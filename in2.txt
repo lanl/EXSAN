@@ -1,2 +1,2 @@
 ENDF/B-VIII.0
-all
+all pointwise
