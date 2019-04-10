@@ -592,7 +592,9 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
         decaySummary[decay['styp']] = radSummary
 
     if miniParse:
-        return decaySummary
+        mem.decaySummary = copy(decaySummary)
+        mem.decaySummary['isotope']=iso
+        return
 
     mem.resultsText.delete('1.0', END)
     mem.resultsText.insert(INSERT, '     -- Radioactive Decay Summary: %s --\n\n'%(iso))
@@ -604,9 +606,10 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
         mem.resultsText.insert(INSERT, u'%18s %10.3f %s\n\n'%(u'T-\u00BD:', value, units))
 
     mem.resultsText.insert(INSERT, '='*50+'\n\n')
+
     for k,v in decaySummary.iteritems():
-        if k==u'T-\u00BD': # already printing half life at the top of the summary
-            continue
+        # if k==u'T-\u00BD': # already printing half life at the top of the summary
+        #     continue
         mem.resultsText.insert(INSERT, '%s\n\n'%(k))
         if k == 'Decay Modes':
             for vi in v:
@@ -1208,7 +1211,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
                  3:"Mean free path (cm^2/g)"}
 
 
-    tableFormat = [1.05, 0.0, 1.2, 1.0] if allFlag else [1.1, 1.-0.06*(len(mem.plotTitles)+1), 1.35, 0.06*(len(mem.plotTitles)+1)]
+    tableFormat = [1.05, 0.0, 1.2, 1.0] if allFlag else [1.05, 1.-0.06*(len(mem.plotTitles)+1), 1.35, 0.06*(len(mem.plotTitles)+1)]
     the_table = ax1.table(cellText=mem.cell_text,
                         loc='right',
                         colWidths=[0.15,0.6,0.5,0.5,0.6,0.5,0.5,0.6],
@@ -1224,14 +1227,14 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
             cell.set_text_props(fontproperties=FontProperties(weight='bold'))
         if row == 0:
             cell._text.set_fontsize(14)
-
+            cell.set_facecolor('lightgrey')
         if col==0 and row>=1:
             colorIdx = row%len(mem.c)
             cell._text.set_color(mem.c[row-1])
 
 
     the_table.auto_set_column_width([-1,-1,-1,-1,-1,-1,-1,-1])
-    the_table.auto_set_font_size(False)
+    the_table.auto_set_font_size(True)
     # the_table.set_fontsize(18)
     the_table.scale(1, 0.25)
     ax1.set_xlim([0.6*np.array(mem.minimumX).min(),1.4*np.array(mem.maximumX).max()])
@@ -1312,7 +1315,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
         pl.show()
 
 
-def plotDecay():
+def plotDecay(saveFlag=False):
     '''
     This function will plot decay data
     '''
@@ -1343,6 +1346,7 @@ def plotDecay():
     titles = []
     minX, maxX, minY, maxY, cellText, tableColors = ([] for i in range(6))
     avgE, maxE = ({} for i in range(2))
+    xData = None
     for k,v in mem.decaySummary.iteritems():
         if k in ['Half Life', 'Decay Modes', u'T-\xbd','isotope']:
             continue
@@ -1365,9 +1369,11 @@ def plotDecay():
 
         i += 1
 
+    if not xData:
+        return None
     # Table
-    columnText = ['Particle', 'Avg. Energy (eV)', 'Max Energy (eV)']
-    tableFormat = [1.1, 0.3, 1.0, 0.3]
+    columnText = ['Particle', r'$E_{avg}\ (eV)$', r'$E_{max}\ (eV)$']
+    tableFormat = [1.05, 1-0.06*(len(titles)+1), 1.2, 0.06*(len(titles)+1)]
     the_table = ax.table(cellText=cellText,
                         loc = 'right',
                         colWidths = [0.25, 0.25, 0.25],
@@ -1380,37 +1386,48 @@ def plotDecay():
     for (row, col), cell in the_table.get_celld().items():
         cell.set_linewidth(0)
         if (row == 0) or (col == 0):
-            cell.set_text_props(fontproperties=FontProperties(weight='bold', size=30))
+            cell.set_text_props(color='k')
+        if row==0:
+            cell.set_facecolor('lightgrey')
         if col == 0 and row >= 1:
             colorIdx = i%len(mem.c)
             cell._text.set_color(tableColors[row-1])
+            cell.set_text_props(fontweight='bold')
 
     the_table.auto_set_column_width([-1, -1, -1])
     the_table.auto_set_font_size(True)
     the_table.scale(4,2)
-
-
-
 
     val, unit = getDecayUnits(mem.decaySummary[u'T-\xbd'][0])
     fs = 20
     fw = 'bold'
     pl.legend(loc=3, fontsize=fs/2., markerscale=1)
     if val>1000:
-        pl.title(u'%s\nT-\xbd = %.3e %s'%(mem.decaySummary['isotope'], val, unit), fontsize=fs, fontweight=fw)
+        titleString = u'%s\n$T_{\xbd} = %.3e\ %s$'%(mem.decaySummary['isotope'], val, unit)
+        # pl.suptitle(u'%s\n$T-\xbd = %.3e %s$'%(mem.decaySummary['isotope'], val, unit), fontsize=fs, fontweight=fw)
     else:
-        pl.title(u'%s\nT-\xbd = %.3f %s'%(mem.decaySummary['isotope'], val, unit), fontsize=fs, fontweight=fw)
+        titleString = u'%s\n$T_{\xbd} = %.3f\ %s$'%(mem.decaySummary['isotope'], val, unit)
+    pl.suptitle(titleString, fontsize=fs, fontweight=fw)
     pl.xlabel('Energy (eV)', fontsize=fs-4)
     pl.ylabel('Probability per decay', fontsize=fs-4)
     ax.set_xlim([0.1*min(minX), 6*max(maxX)])
     ax.set_ylim([0.1*min(minY), 6*max(maxY)])
     pl.grid(which='both', linestyle='--',color='0.9')
+    pl.subplots_adjust(wspace=0, hspace=0)
 
     if mem.Cursor_var.get():
         cursor = SnapToCursor(ax, snapData, fig.canvas, titles, (0.1, 0.9), 'prob')
         pl.connect('motion_notify_event', cursor.mouse_move)
 
-    pl.show()
+    if saveFlag==True:
+        if not os.path.exists('figs'):
+            os.mkdir('figs')
+        name = '%s_decay'%(mem.decaySummary['isotope'])
+        pdf = mem.savePDF('figs/%s.pdf'%(name))
+        pdf.savefig(fig)
+        pdf.close()
+    else:
+        pl.show()
 
 #===========================================================
 #  This function unzips NNDCD ENDF files, and extracts each
@@ -2676,18 +2693,30 @@ def makeWidgets(root):
 
 
 def runBatch():
-    def allXS(plotType):
-        from matplotlib.backends.backend_pdf import PdfPages as savePDF
-        mem.savePDF = savePDF
+    from matplotlib.backends.backend_pdf import PdfPages as savePDF
+    mem.savePDF = savePDF
+
+    def allXS(plotType, dirs):
         flag_pOrM_master = False
         saveFlag_master = True
         allFlag_master = True
         loopList = []
+        log = []
         if plotType == 'decay':
             mem.note1.select(2)
             for k,v in sorted(mem.masterTracker[plotType].iteritems()): loopList.append(sorted(v.keys()))
-            loopList = [item for sublist in loopList for item in subliss]
-            st()
+            loopList = [item for sublist in loopList for item in sublist]
+            dir = [d for d in dirs if 'decay' in d][0]
+            for i, isotope in enumerate(loopList, start=1):
+                print '%i / %i : %s'%(i, len(loopList), isotope)
+                try:
+                    get_decay_data(isotope, dir, miniParse=True)
+                    plotDecay(saveFlag=True)
+                except:
+                    log.append(isotope)
+            print log
+            print len(log)
+            return None
 
         elif plotType =='pointwise' or plotType =='multigroup':
             mem.note1.select(0)
@@ -2750,7 +2779,7 @@ def runBatch():
                 mem.verSelect.set(tmp[k])
                 update_files()
             type = line.split()[-1]
-            allXS(type)
+            allXS(type, dirDict2[k])
             tex()
             return None
         else:
@@ -2791,8 +2820,8 @@ def runBatch():
                     logTxtAndPrint('batch analysis: %s %s'%(lib, xs))
                     getInfo2([xs], flag_pOrM, allFlag)
 
-            from matplotlib.backends.backend_pdf import PdfPages as savePDF
-            mem.savePDF = savePDF
+            # from matplotlib.backends.backend_pdf import PdfPages as savePDF
+            # mem.savePDF = savePDF
             plotMe2(None, allFlag, saveFlag)
             clearAll()
             mem.Select_E1.set(libDict[k]['E'])
@@ -2836,7 +2865,7 @@ def tex():
         \begin{landscape}
         \begin{centering}
         \begin{figure}
-          \includegraphics[width=0.7\linewidth]{%s}
+          \includegraphics[width=\linewidth]{%s}
           \caption{%s}'''%(s, contentsCaption)
 
         c = r''''''
@@ -2911,7 +2940,7 @@ def tex():
     # Body of the tex file, one for each figure
     #######################################################
     body = r''''''
-    for fig in figs:
+    for fig in sorted(figs):
         body += addBody(fig)
 
     #######################################################
@@ -2922,6 +2951,7 @@ def tex():
     with open('tex.tex', 'w') as f:
         f.write(tex)
     sp.check_call(['pdflatex', 'tex.tex'])
+    return None
 
 
 
