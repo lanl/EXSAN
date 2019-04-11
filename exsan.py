@@ -44,7 +44,7 @@ from datadic import *
 import urllib, urllib2
 import re
 from scipy.interpolate import CubicSpline as cs
-import time
+import time, datetime
 from copy import copy
 from pdb import set_trace as st
 from pylab import connect, draw
@@ -52,6 +52,7 @@ import subprocess as sp
 from shutil import move as mv
 from collections import OrderedDict as od
 from argparse import ArgumentParser
+
 
 opt = ArgumentParser(usage='python exsan.py [options]')
 opt.add_argument('-n',  '--njoy', dest='njoyPath',  help='Absolute path to NJOY2016')
@@ -1055,7 +1056,7 @@ def savePlotData():
 #===========================================================
 #   Create cross section plots, tabular data, and pie charts
 #===========================================================
-def plotMe2(event=None, allFlag=False, saveFlag=False):
+def plotMe2(event=None, allFlag=False, saveFlag=False, saveDir='figs'):
     # same as findNearest function... why repeat it?
     def fn(array,value):
         return (np.abs(array-value)).argmin()
@@ -1104,12 +1105,12 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
     pl.cla()
     if allFlag:
         fig = pl.figure(1)
-        figImg = fig.set_size_inches(15., 15.)
+        figImg = fig.set_size_inches(15., 10.)
         ax1 = pl.subplot2grid((2, 4), (0, 0), colspan=2)
 
     else:
         fig = pl.figure(1)
-        figImg = fig.set_size_inches(15., 7.5)
+        figImg = fig.set_size_inches(12., 6)
         ax1 = pl.subplot2grid((1,2), (0, 0))
 
     # fig1, ax1 = pl.subplots()
@@ -1228,6 +1229,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
         if row == 0:
             cell._text.set_fontsize(14)
             cell.set_facecolor('lightgrey')
+            cell.set_height(.2)
         if col==0 and row>=1:
             colorIdx = row%len(mem.c)
             cell._text.set_color(mem.c[row-1])
@@ -1237,8 +1239,8 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
     the_table.auto_set_font_size(True)
     # the_table.set_fontsize(18)
     the_table.scale(1, 0.25)
-    ax1.set_xlim([0.6*np.array(mem.minimumX).min(),1.4*np.array(mem.maximumX).max()])
-    ax1.set_ylim([0.6*np.array(mem.minimumY).min(),1.4*np.array(mem.maximumY).max()])
+    ax1.set_xlim([0.6*np.array(mem.minimumX).min(), 1.4*np.array(mem.maximumX).max()])
+    ax1.set_ylim([max(0.6*np.array(mem.minimumY).min(), 1.e-7), 1.4*np.array(mem.maximumY).max()])
     ax1.grid(which='both', linestyle='--',color='0.8')
 
 
@@ -1278,7 +1280,6 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
                 sl = sorted([(si,li) for si,li in sl if si>=0.05], reverse=True)
                 ax.pie(sorted(sizes,reverse=True))
                 ax.axis('equal')
-                box = ax.get_position()
                 ax.legend(prop={'size':legendFontSize}, bbox_to_anchor=[0.75+i*0.1, 0.15], labels=['%1.1f %%, %s' % (s,l) for s,l in sl])
                 ax.set_title(titleList[i])
 
@@ -1297,8 +1298,8 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
 
 
     if saveFlag==True:
-        if not os.path.exists('figs'):
-            os.mkdir('figs')
+        if not os.path.exists(saveDir):
+            os.mkdir(saveDir)
         name = []
         for p in mem.plotTitles:
             name.append(p.replace(' ','_'))
@@ -1308,14 +1309,14 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
             el = isotope.split('-')[0]
             if mem.allListMasterMaster[el][isotope]==mem.plotTitles:
                 name = '%s_All'%(isotope)
-        pdf = mem.savePDF('figs/%s.pdf'%(name))
+        pdf = mem.savePDF('%s/%s.pdf'%(saveDir, name))
         pdf.savefig(figImg)
         pdf.close()
     else:
         pl.show()
 
 
-def plotDecay(saveFlag=False):
+def plotDecay(saveFlag=False, saveDir='figs'):
     '''
     This function will plot decay data
     '''
@@ -1354,7 +1355,7 @@ def plotDecay(saveFlag=False):
         yData = [vi[1] for vi in v]
         totFrac = np.sum([j[1] for j in mem.decaySummary[k]])
         avgE[k] = np.sum([j[0]*j[1]/totFrac for j in mem.decaySummary[k]])
-        maxE[k] = mem.decaySummary[k][-1][0]
+        maxE[k] = max(i[0] for i in mem.decaySummary[k])
         cellText.append(['%s'%(k), '%.3e'%(avgE[k]), '%.3e'%(maxE[k])])
         minX.append(min(xData))
         minY.append(min(yData))
@@ -1404,7 +1405,6 @@ def plotDecay(saveFlag=False):
     pl.legend(loc=3, fontsize=fs/2., markerscale=1)
     if val>1000:
         titleString = u'%s\n$T_{\xbd} = %.3e\ %s$'%(mem.decaySummary['isotope'], val, unit)
-        # pl.suptitle(u'%s\n$T-\xbd = %.3e %s$'%(mem.decaySummary['isotope'], val, unit), fontsize=fs, fontweight=fw)
     else:
         titleString = u'%s\n$T_{\xbd} = %.3f\ %s$'%(mem.decaySummary['isotope'], val, unit)
     pl.suptitle(titleString, fontsize=fs, fontweight=fw)
@@ -1420,10 +1420,10 @@ def plotDecay(saveFlag=False):
         pl.connect('motion_notify_event', cursor.mouse_move)
 
     if saveFlag==True:
-        if not os.path.exists('figs'):
-            os.mkdir('figs')
+        if not os.path.exists(saveDir):
+            os.mkdir(saveDir)
         name = '%s_decay'%(mem.decaySummary['isotope'])
-        pdf = mem.savePDF('figs/%s.pdf'%(name))
+        pdf = mem.savePDF('%s/%s.pdf'%(saveDir,name))
         pdf.savefig(fig)
         pdf.close()
     else:
@@ -2704,18 +2704,18 @@ def runBatch():
         log = []
         if plotType == 'decay':
             mem.note1.select(2)
-            for k,v in sorted(mem.masterTracker[plotType].iteritems()): loopList.append(sorted(v.keys()))
+            for k,v in sorted(mem.masterTracker[plotType].iteritems()):
+                loopList.append(sorted(v.keys()))
             loopList = [item for sublist in loopList for item in sublist]
             dir = [d for d in dirs if 'decay' in d][0]
             for i, isotope in enumerate(loopList, start=1):
-                print '%i / %i : %s'%(i, len(loopList), isotope)
                 try:
                     get_decay_data(isotope, dir, miniParse=True)
-                    plotDecay(saveFlag=True)
+                    plotDecay(saveFlag=True, saveDir=saveDir)
                 except:
                     log.append(isotope)
-            print log
-            print len(log)
+            for i, iLog in enumerate(log):
+                print i, iLog
             return None
 
         elif plotType =='pointwise' or plotType =='multigroup':
@@ -2727,23 +2727,14 @@ def runBatch():
                 for k1, v1 in sorted(mem.masterTracker[plotType][k0].iteritems()):
                     try:
                         getInfo2(v1, flag_pOrM_master, allFlag_master)
-                        plotMe2(None, allFlag_master, saveFlag_master)
+                        plotMe2(None, allFlag_master, saveFlag_master, saveDir=saveDir)
                     except:
                         pass
                     clearAll()
 
 
-        # for key in sorted(mem.allListMasterMaster):
-        #     for key1 in sorted(mem.allListMasterMaster[key]):
-        #         print key1
-        #         try:
-        #             getInfo2(mem.allListMasterMaster[key][key1], flag_pOrM_master, allFlag_master)
-        #             plotMe2(None, allFlag_master, saveFlag_master)
-        #         except:
-        #             pass
-        #         clearAll()
-
     if mem.batchFile == None:
+        root.update()
         batchFile = tkFileDialog.askopenfilename()
     else:
         batchFile = mem.batchFile
@@ -2761,6 +2752,8 @@ def runBatch():
     tmp = {}
     for i, (k,v) in enumerate(sorted(dirDict2.iteritems())):
         tmp[k]=i
+
+    saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
 
     libDict = {}
     for line in lines:
@@ -2780,7 +2773,8 @@ def runBatch():
                 update_files()
             type = line.split()[-1]
             allXS(type, dirDict2[k])
-            tex()
+            for iTex in range(2): # compile 2x for hyperrefs
+                tex(saveDir)
             return None
         else:
             libDict[lib]['xs'].append(line)
@@ -2822,13 +2816,14 @@ def runBatch():
 
             # from matplotlib.backends.backend_pdf import PdfPages as savePDF
             # mem.savePDF = savePDF
-            plotMe2(None, allFlag, saveFlag)
+            plotMe2(None, allFlag, saveFlag, saveDir=saveDir)
             clearAll()
             mem.Select_E1.set(libDict[k]['E'])
-        tex()
+        for iTex in range(2): # compile 2x for hyperrefs
+            tex(saveDir)
 
 
-def tex():
+def tex(figDir):
     '''
     This module writes a LaTeX file that assembles all of the figures
     from a batch run, and adds an alphabetical index with hyperlinks
@@ -2865,7 +2860,7 @@ def tex():
         \begin{landscape}
         \begin{centering}
         \begin{figure}
-          \includegraphics[width=\linewidth]{%s}
+          \includegraphics[width=1.0\linewidth]{%s}
           \caption{%s}'''%(s, contentsCaption)
 
         c = r''''''
@@ -2889,7 +2884,8 @@ def tex():
     #######################################################
     # list of figures output by EXSAN's batch analysis
     #######################################################
-    figs = glob('./figs/*')
+    figs = glob('%s/*'%(figDir))
+    outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
 
 
     #######################################################
@@ -2948,10 +2944,10 @@ def tex():
     #######################################################
     tex = top + body + tail
 
-    with open('tex.tex', 'w') as f:
+    with open(outputFileName, 'w') as f:
         f.write(tex)
-    sp.check_call(['pdflatex', 'tex.tex'])
-    return None
+    sp.check_call(['pdflatex', outputFileName])
+    return
 
 
 
@@ -3003,7 +2999,7 @@ def main():
     banner +="                   |  _|  \  /\___ \ / _ \ |  \| |\n"
     banner +="                   | |___ /  \ ___) / ___ \| |\  |\n"
     banner +="                   |_____/_/\_\____/_/   \_\_| \_|\n"
-    banner +="\n-- The (E)NDF (C)ross (S)ection (An)alysis and visualization appication --\n"
+    banner +="\n-- The (E)NDF (C)ross (S)ection (An)alysis and visualization application --\n"
     banner +="                             Created by:\n"
     banner +="                    H. Omar Wooten, PhD, DABR\n"
     banner +="                          hasani@lanl.gov\n"
