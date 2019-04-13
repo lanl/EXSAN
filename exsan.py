@@ -868,6 +868,8 @@ def update_files(event=None):
 #   Get everything ready to plot
 #===========================================================
 def getInfo2(isotopes, flag_pOrM, allFlag):
+    multiLibFlag = False
+
     if allFlag and len(mem.plotTitles)>0:
         mem.plotX = {}
         mem.plotY= {}
@@ -885,8 +887,8 @@ def getInfo2(isotopes, flag_pOrM, allFlag):
             mem.element=iso.split('-')[0]
             file = mem.fileDict_all[mem.note1.index("current")].keys()[mem.fileDict_all[mem.note1.index("current")].values().index(iso)]
             mtID = mtdic2.keys()[mtdic2.values().index(mtDescript)]
-            f = open(file)
-            mem.lines = f.readlines()
+            with open(file, 'r') as f:
+                mem.lines = f.readlines()
             mem.Title_var.set(iso)
             if mem.particle.get() == 1:  # For X-ray files, MF==23
                 mem.MF_var.set('23')
@@ -894,7 +896,41 @@ def getInfo2(isotopes, flag_pOrM, allFlag):
                 mem.MF_var.set('3')
             mem.MT_var.set(str(mtID))
             mem.MT_descript.set(mtDescript)
-            addPlot(flag_pOrM, allFlag)
+            for k,v in mem.downloadList.iteritems():
+                if v.get() != 0:
+                    type = 'm' if 'multigroup' in file else 'p'
+                    mem.multiLibDic[k].append(
+                        [isotope,
+                        flag_pOrM,
+                        mem.MF_var.get(),
+                        mem.MT_var.get(),
+                        mem.MT_descript.get(),
+                        file])
+                    multiLibFlag = True
+
+            if multiLibFlag:
+                continue
+            else:
+                addPlot(flag_pOrM, allFlag)
+        if multiLibFlag:
+            makeMultiLib()
+
+
+def makeMultiLib():
+    for k,v in mem.multiLibDic.iteritems():
+        if len(v)>0:
+            for vi in v:
+                mem.Title_var.set('%s_%s'%(k, vi[0]))
+                flag_pOrM = vi[1]
+                mem.MF_var.set(vi[2])
+                mem.MT_var.set(vi[3])
+                mem.MT_descript.set(vi[4])
+                with open(vi[5], 'r') as f:
+                    mem.lines = f.readlines()
+                addPlot(flag_pOrM, False)
+
+
+
 
 #===========================================================
 #   A tiny function to find index of nearest value of array
@@ -1110,7 +1146,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False, saveDir='figs'):
 
     else:
         fig = pl.figure(1)
-        figImg = fig.set_size_inches(12., 6)
+        figImg = fig.set_size_inches(15., 10)
         ax1 = pl.subplot2grid((1,2), (0, 0))
 
     # fig1, ax1 = pl.subplots()
@@ -1151,6 +1187,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False, saveDir='figs'):
     if allFlag:
         legendFontSize = 10
 
+    yTmp = np.array([0])
     snapData = []
     for i in range(0,len(mem.plotX.keys())):
         plotOrder.append(mem.plotTitles[i])
@@ -1191,6 +1228,9 @@ def plotMe2(event=None, allFlag=False, saveFlag=False, saveDir='figs'):
             ax1.axvline(x=e,color='darkcyan',linestyle='--')
 
         l = lineStyles[i]
+        if yTmp.tolist()==y.tolist():
+            l = '--'
+        yTmp = y
 
         if 'mg' in title or '$' in title:
             ax1.loglog(x,y, linestyle=l, c=mem.c[colorIdx],lw=lineWidth, drawstyle='steps', label=str(i+1)+'. '+title)
@@ -1229,7 +1269,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False, saveDir='figs'):
         if row == 0:
             cell._text.set_fontsize(14)
             cell.set_facecolor('lightgrey')
-            cell.set_height(.2)
+            cell.set_height(.08)
         if col==0 and row>=1:
             colorIdx = row%len(mem.c)
             cell._text.set_color(mem.c[row-1])
@@ -2170,6 +2210,8 @@ def clearAll(event=None):
     mem.logText.delete('1.0', END)
     logTxtAndPrint('Plots cleared.\n')
     mem.batchFile = None
+    for k,v in mem.multiLibDic.iteritems():
+        mem.multiLibDic[k] = []
 
 def makeMixList(*args):
     master_list(mem.tab02)
@@ -2346,6 +2388,7 @@ def initializeVariables():
     mem.alphaList = []
     mem.xrayList = []
     mem.gammaList = []
+    mem.multiLibDic = {}
 
     mem.decayTypeDict = {
         'Gamma': mem.gammaDict,
@@ -2497,6 +2540,7 @@ def makeWidgets(root):
             mem.downloadList[ver] = IntVar()
             cb = Checkbutton(mem.download_frame, variable=mem.downloadList[ver], text='%-15s'%(ver), font=mem.HDG1)
             cb.grid(row=0, column=i)
+            mem.multiLibDic[ver] = []
 
     mem.selectAll_btn = Button(mem.download_frame,text='Select All',command=selectAll,font=mem.HDG1)
     mem.selectAll_btn.grid(row=1, column=1)
