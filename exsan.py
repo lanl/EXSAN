@@ -1934,7 +1934,18 @@ def getDecayUnits(d):
 
 def displayAnalysis(event=None):
     def dictToArray(dict,num):
-        a = sorted(dict.items(), key=operator.itemgetter(num))
+        if num == 2:
+            outList = []
+            a = sorted(dict.items(), key=operator.itemgetter(0))
+            elements = np.unique([i[0].split('-')[0] for i in a]).tolist()
+            dicElements = {}
+            for el in elements:
+                dicElements[el] = [i for i in a if i[0].split('-')[0]==el]
+                dicElements[el] = sorted(dicElements[el], key = lambda x: x[1], reverse=True)
+            a = [vi for k,v in sorted(dicElements.iteritems()) for vi in v]
+
+        else:
+            a = sorted(dict.items(), key=operator.itemgetter(num))
         a = np.array(a)
         return a
 
@@ -1981,19 +1992,22 @@ def displayAnalysis(event=None):
 
         mem.resultsText.delete('1.0', END)
         if mem.microMacro.get() == 1:
-            mem.resultsText.insert(INSERT, u"Isotope         \u03a3(1/cm)\n")
+            mem.resultsText.insert(INSERT, u"   Isotope      \u03a3(1/cm)\n\n")
         elif mem.microMacro.get() == 2:
-            mem.resultsText.insert(INSERT, u"Isotope         Mean_Free_Path(cm)\n")
+            mem.resultsText.insert(INSERT, u"   Isotope      Mean_Free_Path(cm)\n\n")
         elif mem.microMacro.get() == 3:
-            mem.resultsText.insert(INSERT, u"Isotope         \u03a3/\u03c1(cm^2/g)\n")
+            mem.resultsText.insert(INSERT, u"   Isotope      \u03a3/\u03c1(cm^2/g)\n\n")
         else:
-            mem.resultsText.insert(INSERT, u"Isotope         \u03c3(barns)\n")
+            mem.resultsText.insert(INSERT, u"   Isotope      \u03c3(barns)\n\n")
 
         for i in range(len(mem.resultsToPrint)):
             if isinstance(mem.resultsToPrint[i,1], basestring):
                 mem.resultsText.insert(INSERT, '%3i %-10s %8.4e\n' %(i+1, mem.resultsToPrint[i,0],float(mem.resultsToPrint[i,1]))) #'%2s%3s' % (MF, MT)
             else:
                 mem.resultsText.insert(INSERT, '%3i %-10s %8.4e\n' %(i+1, mem.resultsToPrint[i,0],float(mem.resultsToPrint[i,1]))) #'%2s%3s' % (MF, MT)
+            if mem.sortBy.get() in [0, 2] and i< len(mem.resultsToPrint)-1:
+                if mem.resultsToPrint[i+1,0].split('-')[0] !=mem.resultsToPrint[i,0].split('-')[0]:
+                    mem.resultsText.insert(INSERT, '\n')
 
 #===========================================================
 #   Process all raw ENDF files with NJOY
@@ -2485,8 +2499,8 @@ def makeWidgets(root):
 
     mem.sortBy_frame = Frame(mem.tab01, width=mem.rootWidth, height=50, pady=7)#, relief=GROOVE, borderwidth=2)
     mem.sortBy_frame.columnconfigure(0, weight=1)
-    mem.sortByXS_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/6, height=52, padx=20, text='Sort analysis')
-    mem.sortByE_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/4, height=52, padx=20, text='Analysis energy')
+    mem.sortByXS_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/3.8, height=52, padx=20, text='Sort analysis')
+    mem.sortByE_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/5, height=52, padx=20, text='Analysis energy')
     mem.sortDecay_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/2.5, height=52, padx=20, text='Decay Analysis')
     # mem.mix_frame = Frame(mem.sortBy_frame, width= 200, height=50, padx=20)
 
@@ -2638,8 +2652,10 @@ def makeWidgets(root):
     mem.sortBy = IntVar()
     mem.sortByName = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=0,text='by isotope',command=displayAnalysis,font=mem.HDG1)
     mem.sortByXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=1,text='by value',command=displayAnalysis,font=mem.HDG1)
+    mem.sortByNameThenXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=2,text='by isotope, then value',command=displayAnalysis,font=mem.HDG1)
     mem.sortByName.grid(row=0,column=0)
     mem.sortByXS.grid(row=0,column=1)
+    mem.sortByNameThenXS .grid(row=0, column=2)
 
     mem.eRange = IntVar()
     mem.eRangeTh = Radiobutton(mem.sortByE_frame,variable=mem.eRange,value=0,text='Th',command=displayAnalysis,font=mem.HDG1)
