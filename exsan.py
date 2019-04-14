@@ -2417,14 +2417,13 @@ def initializeVariables():
         'e- anti-neutrinos': mem.antiNeutrinoDict,
         'e- neutrinos': mem.neutrinoDict}
 
-mem.halfLifeScale = {
+    mem.halfLifeScale = {
         'sec':[0., 60.],
         'min':[60., 3600.],
         'hrs':[3600., 86400.],
         'days':[86400., 2.592e6],
         'months':[2.592e6, 3.1536e7],
         'years':[3.1536e7, 1.e99]}
-
 
 
 def makeWidgets(root):
@@ -2632,7 +2631,7 @@ def makeWidgets(root):
     # mem.Analyze_btn = Button(mem.userMT_frame, width=10, text = 'Analyze All', command=lambda tab01=mem.tab01:master_list(mem.tab01),padx=2,font=mem.HDG1)
     mem.SaveAnalysis_Btn = Button(mem.userMT_frame, width=13, text='Save Analysis', command=saveText,padx=2,font=mem.HDG1)
     mem.SavePlotData_Btn = Button(mem.userMT_frame, width=15, text='Save Plot Data', command=savePlotData,padx=2,font=mem.HDG1)
-    mem.RunBatch_Btn = Button(mem.userMT_frame, width=10, text='Batch', command=runBatch, padx=2, font=mem.HDG1)
+    mem.RunBatch_Btn = Button(mem.userMT_frame, width=10, text='Batch', command=lambda root=root: runBatch(root), padx=2, font=mem.HDG1)
     mem.Plot_Btn = Button(mem.userMT_frame, width=10, text='Plot', command=plotMe2, padx=2, font=mem.HDG1)
     mem.Cursor_var = IntVar()
     mem.Cursor = Checkbutton(mem.userMT_frame, variable=mem.Cursor_var, text='Cursor', font=mem.HDG1)
@@ -2746,17 +2745,31 @@ def makeWidgets(root):
     # Launch batch mode if input file is provided
     if options.batchFile:
         mem.batchFile = options.batchFile
-        runBatch()
+        runBatch(root)
     else:
         mem.batchFile = None
 
 
 
-def runBatch():
+def runBatch(root):
     from matplotlib.backends.backend_pdf import PdfPages as savePDF
     mem.savePDF = savePDF
 
+    def writeTexIndexStyleFile():
+        '''
+        This makes a nicely-formatted index for LaTexFiles
+        '''
+        with open('index_style.ist', 'w') as f:
+            f.write('headings_flag 1\n')
+            f.write(r'heading_prefix "{\\large\\rmfamily\\bfseries "'+'\n')
+            f.write(r'heading_suffix "}\\nopagebreak\n"'+'\n')
+            f.write(r'delim_0 " \\dotfill "'+'\n')
+            f.write(r'delim_1 " \\dotfill "'+'\n')
+            f.write(r'delim_2 " \\dotfill "'+'\n')
+
     def allXS(plotType, dirs):
+
+        writeTexIndexStyleFile()
         flag_pOrM_master = False
         saveFlag_master = True
         allFlag_master = True
@@ -2793,6 +2806,100 @@ def runBatch():
                     clearAll()
 
 
+    def allAnalyze(lib, dataType, reportType):
+        writeTexIndexStyleFile()
+
+        def addBody(s, caption):
+            b = r'''
+                \begin{center}
+                \begin{longtable}[p]{ccc}
+                \caption{%s.}\\
+                \hyperref[index]{Index} / \hyperlink{page.1}{TOC}\\
+                \hline
+                \index{%s}
+                \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                \hline
+                \endfirsthead
+                \multicolumn{3}{c}
+                {\tablename\ \thetable\ -- \textit{Continued from previous page}} \\
+                \hline
+                \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                \hline
+                \endhead
+                \hline \multicolumn{3}{c}{\textit{Continued on next page}} \\
+                \endfoot
+                \hline
+                \endlastfoot
+                '''%(caption[1], caption[1])
+
+            c = r'''
+            '''
+            for i, si in enumerate(s.split('\n')):
+                si = si.split()
+                if len(si)>1:
+                    c += \
+                    r'''
+                    %s & %s & %s \\'''%(si[0], si[1], si[2])
+                else:
+                    c += \
+                    r'''\\'''
+
+            c +=r'''
+            \end{longtable}
+            \end{center}
+            \newpage
+            '''
+            return b+c
+
+
+        sortByDic = {
+            0: 'By isotope',
+            1: 'By value',
+            2: 'By isotope then by value'}
+
+        eRangeDic = {
+            0: 'Thermal',
+            1: 'Fission',
+            2: 'Fusion',
+            3: 'User'}
+
+        if type == 'multigroup':
+            mem.note1.select(1)
+        else:
+            mem.note1.select(0)
+        MTlist = sorted([int(mt) for mt in mtdic2.keys() if int(mt) <=107])
+        MTlist.append('849')
+        MTlist.append('999')
+        MTlist = [str(mt) for mt in MTlist]
+
+        top, tail = texTopAndTail(lib, dataType, reportType)
+
+        body = r''''''
+
+        energiesNum = 3 if float(mem.Select_E1.get()) == 0. else 4
+        for i, MT in enumerate(MTlist):
+            mem.Select_MT.set(mtdic2[MT])
+            master_list(mem.tab01)
+            for energy in range(energiesNum):
+                mem.eRange.set(energy)
+                for sortBy in range(3):
+                    mem.sortBy.set(sortBy)
+                    displayAnalysis()
+                    caption = [i, '%s.%s.%s'%(mtdic2[MT].replace('_',' ').capitalize(), eRangeDic[energy], sortByDic[sortBy])]
+                    body += addBody(mem.resultsText.get('3.0',END), caption)
+
+
+        tex = top + body + tail
+        outputFileName = 'texAnalysis_%s.tex'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
+
+        with open(outputFileName, 'w') as f:
+            f.write(tex)
+        for iTex in range(2): # compile twice
+            sp.check_call(['pdflatex', outputFileName])
+        return None
+
+
+
     if mem.batchFile == None:
         root.update()
         batchFile = tkFileDialog.askopenfilename()
@@ -2816,6 +2923,8 @@ def runBatch():
     saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
 
     libDict = {}
+    dataType = None
+    reportType = None
     for line in lines:
         if line in dirDict2.keys():
             lib = line
@@ -2828,13 +2937,22 @@ def runBatch():
             libDict[lib]['save'].append(libDict[lib]['xs'])
             libDict[lib]['xs'] = []
         elif 'all' in line:
-            if not mem.verSelect.get()==tmp[k]:
-                mem.verSelect.set(tmp[k])
+            if not mem.verSelect.get()==tmp[lib]:
+                mem.verSelect.set(tmp[lib])
                 update_files()
-            type = line.split()[-1]
-            allXS(type, dirDict2[k])
+            dataType = line.split()[-1]
+            reportType = 'All Reactions'
+            allXS(dataType, dirDict2[lib])
             for iTex in range(2): # compile 2x for hyperrefs
-                tex(saveDir)
+                texBatchPlot(saveDir, lib, dataType, reportType)
+            return None
+        elif 'analysis' in line:
+            if not mem.verSelect.get()==tmp[lib]:
+                mem.verSelect.set(tmp[lib])
+                update_files()
+            dataType = line.split()[-1]
+            reportType = 'Analysis'
+            allAnalyze(lib, dataType, reportType)
             return None
         else:
             libDict[lib]['xs'].append(line)
@@ -2880,10 +2998,66 @@ def runBatch():
             clearAll()
             mem.Select_E1.set(libDict[k]['E'])
         for iTex in range(2): # compile 2x for hyperrefs
-            tex(saveDir)
+            texBatchPlot(saveDir, lib, dataType, reportType)
 
 
-def tex(figDir):
+def texTopAndTail(endf, dataType, reportType):
+        texTop = r'''
+        \documentclass{article}
+        \usepackage{graphicx}
+        \usepackage{pdflscape}
+        \usepackage[margin=0.8in]{geometry}
+        \usepackage{longtable}
+        \usepackage{fancyhdr}
+        \usepackage{imakeidx}
+        \makeindex[columns=2, title={Alphabetical Index\label{index}},options={-s index_style.ist}, intoc]
+        \usepackage{hyperref}
+        \hypersetup{
+            colorlinks=true,
+            linkcolor=blue,
+            filecolor=magenta,
+            urlcolor=cyan
+        }
+        \usepackage[utf8]{inputenc}
+        \usepackage[T1]{fontenc}
+        \usepackage[mmddyyyy]{datetime}
+        \fancyhead{}
+        \fancyfoot{}
+        \fancyhead[CO,CE]{---    Compiled by EXSAN on \today    ---}
+        \fancyfoot[C]{EXSAN}
+        \fancyfoot[R] {\thepage}
+        \begin{document}
+        \title{EXSAN Cross Sections}
+        \maketitle
+        \pagestyle{fancy}
+        \thispagestyle{fancy}
+        \tableofcontents
+        \listoffigures
+        \listoftables
+        \section{Details}
+        \begin{tabular}{ll}
+        Date: & \today \\
+        ENDF Library: & %s \\
+        Data Type: & %s \\
+        Report Type: & %s \\
+        \end{tabular}\\ \\ \\
+        \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
+        \newpage
+        \section{Plots, Tables, and Data}
+        '''%(endf, dataType, reportType)
+
+        texTail = r'''
+        \printindex
+        \hyperlink{page.1}{TOC}
+        \end{document}
+        '''
+        return texTop, texTail
+
+#===========================================================
+# Write LaTeX file containing plots from batch file
+#===========================================================
+
+def texBatchPlot(figDir, lib, dataType, reportType):
     '''
     This module writes a LaTeX file that assembles all of the figures
     from a batch run, and adds an alphabetical index with hyperlinks
@@ -2933,7 +3107,7 @@ def tex(figDir):
         b += \
         r'''
           \label{fig:%s}
-        \hyperref[index]{index}
+        \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
         \end{figure}
         \end{centering}
         \end{landscape}
@@ -2941,67 +3115,29 @@ def tex(figDir):
         return b
 
 
-    #######################################################
+    #===========================================================
     # list of figures output by EXSAN's batch analysis
-    #######################################################
+    #===========================================================
     figs = glob('%s/*'%(figDir))
     outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
 
 
-    #######################################################
-    # Top of the tex file
-    #######################################################
-    top =\
-    r'''
-    \documentclass{article}
-    \usepackage{graphicx}
-    \usepackage{pdflscape}
-    \usepackage[margin=0.8in]{geometry}
-    \usepackage{fancyhdr}
-    \usepackage{imakeidx}
-    \usepackage{hyperref}
-    \hypersetup{
-        colorlinks=true,
-        linkcolor=blue,
-        filecolor=magenta,
-        urlcolor=cyan
-    }
-    \usepackage[utf8]{inputenc}
-    \usepackage[T1]{fontenc}
-    \usepackage{imakeidx}
-    \usepackage[mmddyyyy]{datetime}
-    \fancyhead{}
-    \fancyfoot{}
-    \fancyhead[CO,CE]{---    Compiled by EXSAN on \today    ---}
-    \fancyfoot[C]{EXSAN}
-    \fancyfoot[R] {\thepage}
-    \makeindex[columns=2, title={Alphabetical Index\label{index}}]
-    \begin{document}
-    \title{EXSAN Cross Sections}
-    \maketitle
-    \pagestyle{fancy}
-    \thispagestyle{fancy}
-    '''
+    #===========================================================
+    # Top and bottom of the tex file
+    #===========================================================
+    top, tail = texTopAndTail(lib, dataType, reportType)
 
-    #######################################################
-    # Bottom of the tex file
-    #######################################################
-    tail = \
-    r'''
-    \printindex
-    \end{document}
-    '''
 
-    #######################################################
+    #===========================================================
     # Body of the tex file, one for each figure
-    #######################################################
+    #===========================================================
     body = r''''''
     for fig in sorted(figs):
         body += addBody(fig)
 
-    #######################################################
+    #===========================================================
     # Make and write the entire tex file and PDF
-    #######################################################
+    #===========================================================
     tex = top + body + tail
 
     with open(outputFileName, 'w') as f:
@@ -3011,9 +3147,101 @@ def tex(figDir):
 
 
 
-#######################################################
+#===========================================================
+# Write LaTeX file for analysis
+#===========================================================
+def texAnalysis(figDir, lib, datatype, reportType):
+    '''
+    This module writes a LaTeX file that assembles all of the analyses
+    and sort options.
+
+    Helpful links:
+        https://texblog.org/2011/05/15/multi-page-tables-using-longtable/
+    '''
+
+    def addBody(s):
+        '''
+        Add lines for an individual figure including caption, index
+        labels, and and a hyperlink to the Index. This is useful for
+        very large files!
+        '''
+        contents = s.split('/')[-1].split('.')[0].split('__')
+        label = '.'.join(contents)
+        contentsCaption = r''''''
+        indexList = []
+        print s
+        for c in contents:
+            iso, xs = c.split('_')[0:2]
+            if c.split('_') == 3:
+                mg = c.split('_')[-1]
+            el, mass = iso.split('-')
+            contentsCaption += \
+            r'''\textsuperscript{%s}%s %s, '''%(mass, el, xs)
+            indexList.append(r'''%s %s'''%(iso, xs))
+
+        b = \
+        r'''
+        \begin{landscape}
+        \begin{centering}
+        \begin{figure}
+          \includegraphics[width=1.0\linewidth]{%s}
+          \caption{%s}'''%(s, contentsCaption)
+
+        c = r''''''
+        for item in indexList:
+            c += \
+            r'''
+            \index{%s}'''%(item)
+
+        b += c
+        b += \
+        r'''
+          \label{fig:%s}
+        \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
+        \end{figure}
+        \end{centering}
+        \end{landscape}
+        '''%(label)
+        return b
+
+
+    #===========================================================
+    # list of figures output by EXSAN's batch analysis
+    #===========================================================
+    figs = glob('%s/*'%(figDir))
+    outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
+
+
+    #===========================================================
+    # Top and bottom of the tex file
+    #===========================================================
+    top, tail = texTopAndTail(lib, datatype, reportType)
+
+
+    #===========================================================
+    # Body of the tex file, one for each figure
+    #===========================================================
+    body = r''''''
+    for fig in sorted(figs):
+        body += addBody(fig)
+
+    #===========================================================
+    # Make and write the entire tex file and PDF
+    #===========================================================
+    tex = top + body + tail
+
+    with open(outputFileName, 'w') as f:
+        f.write(tex)
+    sp.check_call(['pdflatex', outputFileName])
+    return
+
+
+
+
+
+#===========================================================
 # create a symlink for the NJOY2016 executable file
-#######################################################
+#===========================================================
 def linkNjoy():
     if not os.path.isdir('working'):
         os.mkdir('working')
@@ -3029,9 +3257,9 @@ def linkNjoy():
             print 'NJOY soft link created'
         return
 
-#######################################################
+#===========================================================
 # Update the log file and log Text area of the GUI
-#######################################################
+#===========================================================
 def logTxtAndPrint(s):
     s = s.encode('utf-8')
     mem.logText.insert(END, s)
