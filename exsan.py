@@ -1944,7 +1944,10 @@ def displayAnalysis(event=None):
                 dicElements[el] = sorted(dicElements[el], key = lambda x: x[1], reverse=True)
             a = [vi for k,v in sorted(dicElements.iteritems()) for vi in v]
 
-        else:
+        elif num == 1:
+            a = sorted(dict.items(), key=operator.itemgetter(num), reverse=True)
+
+        elif num == 0:
             a = sorted(dict.items(), key=operator.itemgetter(num))
         a = np.array(a)
         return a
@@ -2933,10 +2936,10 @@ def runBatch(root):
         elif 'E=' in line or 'E =' in line:
             libDict[lib]['E'] = float(line.split('=')[-1])
             libDict[lib]['xs'] = []
-        elif line=='save':
+        elif line == 'save':
             libDict[lib]['save'].append(libDict[lib]['xs'])
             libDict[lib]['xs'] = []
-        elif 'all' in line:
+        elif 'all' in line.split()[0]:
             if not mem.verSelect.get()==tmp[lib]:
                 mem.verSelect.set(tmp[lib])
                 update_files()
@@ -2946,7 +2949,7 @@ def runBatch(root):
             for iTex in range(2): # compile 2x for hyperrefs
                 texBatchPlot(saveDir, lib, dataType, reportType)
             return None
-        elif 'analysis' in line:
+        elif 'analysis' in line.split()[0]:
             if not mem.verSelect.get()==tmp[lib]:
                 mem.verSelect.set(tmp[lib])
                 update_files()
@@ -3023,17 +3026,19 @@ def texTopAndTail(endf, dataType, reportType):
         \usepackage[mmddyyyy]{datetime}
         \fancyhead{}
         \fancyfoot{}
-        \fancyhead[CO,CE]{---    Compiled by EXSAN on \today    ---}
+        \fancyhead[CO,CE]{---    Compiled by EXSAN    ---}
         \fancyfoot[C]{EXSAN}
         \fancyfoot[R] {\thepage}
         \begin{document}
-        \title{EXSAN Cross Sections}
+        \title{ENDF Cross Section \& Nuclear Data Analysis \\
+        \large \url{https://github.com/lanl/EXSAN}}
         \maketitle
         \pagestyle{fancy}
         \thispagestyle{fancy}
         \tableofcontents
         \listoffigures
         \listoftables
+        \newpage
         \section{Details}
         \begin{tabular}{ll}
         Date: & \today \\
