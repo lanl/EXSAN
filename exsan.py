@@ -36,6 +36,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as pl
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from matplotlib.font_manager import FontProperties
 import numpy as np
 import sys, os, operator
 from glob import glob
@@ -43,7 +44,7 @@ from datadic import *
 import urllib, urllib2
 import re
 from scipy.interpolate import CubicSpline as cs
-import time
+import time, datetime
 from copy import copy
 from pdb import set_trace as st
 from pylab import connect, draw
@@ -51,6 +52,7 @@ import subprocess as sp
 from shutil import move as mv
 from collections import OrderedDict as od
 from argparse import ArgumentParser
+
 
 opt = ArgumentParser(usage='python exsan.py [options]')
 opt.add_argument('-n',  '--njoy', dest='njoyPath',  help='Absolute path to NJOY2016')
@@ -591,7 +593,9 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
         decaySummary[decay['styp']] = radSummary
 
     if miniParse:
-        return decaySummary
+        mem.decaySummary = copy(decaySummary)
+        mem.decaySummary['isotope']=iso
+        return
 
     mem.resultsText.delete('1.0', END)
     mem.resultsText.insert(INSERT, '     -- Radioactive Decay Summary: %s --\n\n'%(iso))
@@ -603,9 +607,10 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
         mem.resultsText.insert(INSERT, u'%18s %10.3f %s\n\n'%(u'T-\u00BD:', value, units))
 
     mem.resultsText.insert(INSERT, '='*50+'\n\n')
+
     for k,v in decaySummary.iteritems():
-        if k==u'T-\u00BD': # already printing half life at the top of the summary
-            continue
+        # if k==u'T-\u00BD': # already printing half life at the top of the summary
+        #     continue
         mem.resultsText.insert(INSERT, '%s\n\n'%(k))
         if k == 'Decay Modes':
             for vi in v:
@@ -730,10 +735,14 @@ def update_files(event=None):
     if mem.particle.get() == 0:
         fileDirs[fileDirectory+'/multigroup'] = mem.tab12
         fileDirs['/'.join(fileDirectory.split('/')[:-1])+'/decay'] = mem.tab13
-    mem.allListMaster = {}
-    mem.allListMasterMaster = {}
+    # mem.allListMaster = {}
+    # mem.allListMasterMaster = {}
+    mem.masterTracker = {}
 
     for mem.fileDir, tab in fileDirs.iteritems():
+        mem.allListMaster = {}
+        mem.allListMasterMaster = {}
+
         decayFlag = True if 'decay' in mem.fileDir else False
 
         mem.files = glob('./'+mem.fileDir+'/*.txt')
@@ -850,10 +859,17 @@ def update_files(event=None):
         for letter in az: mem.azDict[letter] = []
         for el in mem.elements: mem.azDict[el[0]].append(el)
 
+        if mem.fileDir.split('/')[-1] == 'neutrons':
+            mem.masterTracker['pointwise'] = mem.allListMasterMaster
+        else:
+            mem.masterTracker[mem.fileDir.split('/')[-1]] = mem.allListMasterMaster
+
 #===========================================================
 #   Get everything ready to plot
 #===========================================================
 def getInfo2(isotopes, flag_pOrM, allFlag):
+    multiLibFlag = False
+
     if allFlag and len(mem.plotTitles)>0:
         mem.plotX = {}
         mem.plotY= {}
@@ -871,8 +887,8 @@ def getInfo2(isotopes, flag_pOrM, allFlag):
             mem.element=iso.split('-')[0]
             file = mem.fileDict_all[mem.note1.index("current")].keys()[mem.fileDict_all[mem.note1.index("current")].values().index(iso)]
             mtID = mtdic2.keys()[mtdic2.values().index(mtDescript)]
-            f = open(file)
-            mem.lines = f.readlines()
+            with open(file, 'r') as f:
+                mem.lines = f.readlines()
             mem.Title_var.set(iso)
             if mem.particle.get() == 1:  # For X-ray files, MF==23
                 mem.MF_var.set('23')
@@ -880,7 +896,41 @@ def getInfo2(isotopes, flag_pOrM, allFlag):
                 mem.MF_var.set('3')
             mem.MT_var.set(str(mtID))
             mem.MT_descript.set(mtDescript)
-            addPlot(flag_pOrM, allFlag)
+            for k,v in mem.downloadList.iteritems():
+                if v.get() != 0:
+                    type = 'm' if 'multigroup' in file else 'p'
+                    mem.multiLibDic[k].append(
+                        [isotope,
+                        flag_pOrM,
+                        mem.MF_var.get(),
+                        mem.MT_var.get(),
+                        mem.MT_descript.get(),
+                        file])
+                    multiLibFlag = True
+
+            if multiLibFlag:
+                continue
+            else:
+                addPlot(flag_pOrM, allFlag)
+        if multiLibFlag:
+            makeMultiLib()
+
+
+def makeMultiLib():
+    for k,v in mem.multiLibDic.iteritems():
+        if len(v)>0:
+            for vi in v:
+                mem.Title_var.set('%s_%s'%(k, vi[0]))
+                flag_pOrM = vi[1]
+                mem.MF_var.set(vi[2])
+                mem.MT_var.set(vi[3])
+                mem.MT_descript.set(vi[4])
+                with open(vi[5], 'r') as f:
+                    mem.lines = f.readlines()
+                addPlot(flag_pOrM, False)
+
+
+
 
 #===========================================================
 #   A tiny function to find index of nearest value of array
@@ -1042,7 +1092,7 @@ def savePlotData():
 #===========================================================
 #   Create cross section plots, tabular data, and pie charts
 #===========================================================
-def plotMe2(event=None, allFlag=False, saveFlag=False):
+def plotMe2(event=None, allFlag=False, saveFlag=False, saveDir='figs'):
     # same as findNearest function... why repeat it?
     def fn(array,value):
         return (np.abs(array-value)).argmin()
@@ -1091,11 +1141,12 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
     pl.cla()
     if allFlag:
         fig = pl.figure(1)
-        figImg = fig.set_size_inches(15., 15.)
+        figImg = fig.set_size_inches(15., 10.)
         ax1 = pl.subplot2grid((2, 4), (0, 0), colspan=2)
+
     else:
         fig = pl.figure(1)
-        figImg = fig.set_size_inches(15., 7.5)
+        figImg = fig.set_size_inches(15., 10)
         ax1 = pl.subplot2grid((1,2), (0, 0))
 
     # fig1, ax1 = pl.subplots()
@@ -1118,9 +1169,17 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
                  2:"cm",
                  3:"cm^2/g"}
 
-    mem.columnText = ['','Th\n(0.025 eV)','Fiss\n(1 MeV)','Fus\n(14 MeV)',
-                  'Custom\n('+'%3.2e'%(mem.Select_E1.get())+' eV)','AvgSigma','ResIntegral',
-                  'FissSpecAvg']
+    eCust = 'N/A' if e_user == 0. else '%3.2e\n(eV)'%(e_user)
+    mem.columnText = ['',
+        r'$E_{th}$',
+        r'$E_{fiss}$',
+        r'$E_{fus}$',
+        # r'$E_{cust}$',
+        # '%3.2e eV'%(mem.Select_E1.get()),
+        eCust,
+        r'$\overline{\sigma}$',
+        r'$\int{\sigma_{res}}$',
+        r'$\overline{\phi_{fiss}(E)}$']
 
 
     lineWidth = 2
@@ -1128,6 +1187,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
     if allFlag:
         legendFontSize = 10
 
+    yTmp = np.array([0])
     snapData = []
     for i in range(0,len(mem.plotX.keys())):
         plotOrder.append(mem.plotTitles[i])
@@ -1168,6 +1228,9 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
             ax1.axvline(x=e,color='darkcyan',linestyle='--')
 
         l = lineStyles[i]
+        if yTmp.tolist()==y.tolist():
+            l = '--'
+        yTmp = y
 
         if 'mg' in title or '$' in title:
             ax1.loglog(x,y, linestyle=l, c=mem.c[colorIdx],lw=lineWidth, drawstyle='steps', label=str(i+1)+'. '+title)
@@ -1177,8 +1240,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
 
         else:
             ax1.loglog(x,y, linestyle=l, c=mem.c[colorIdx],lw=lineWidth, label=str(i+1)+'. '+title)
-        mem.cell_text.append(['%-2s'%(i+1),'%5.3e'%(therm),'%5.3e'%(fiss),'%5.3e'%(fus),'%5.3e'%(user),
-                          '%5.3e'%(avgSigma),'%5.3e'%(resInt), '%5.3e'%(fissSpecAvg)])
+        mem.cell_text.append(['%-2s'%(i+1),'%5.3e'%(therm),'%5.3e'%(fiss),'%5.3e'%(fus),'%5.3e'%(user), '%5.3e'%(avgSigma),'%5.3e'%(resInt), '%5.3e'%(fissSpecAvg)])
         mem.rowText.append(title)
 
         # cursor snap
@@ -1190,7 +1252,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
                  3:"Mean free path (cm^2/g)"}
 
 
-    tableFormat = [1.1, 0.0, 1.2, 1.0] if allFlag else [1.1, 0.0, 1.35, 0.75]
+    tableFormat = [1.05, 0.0, 1.2, 1.0] if allFlag else [1.05, 1.-0.06*(len(mem.plotTitles)+1), 1.35, 0.06*(len(mem.plotTitles)+1)]
     the_table = ax1.table(cellText=mem.cell_text,
                         loc='right',
                         colWidths=[0.15,0.6,0.5,0.5,0.6,0.5,0.5,0.6],
@@ -1200,19 +1262,36 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
                         cellLoc='center',
                         bbox=tableFormat)
 
+    for (row, col), cell in the_table.get_celld().items():
+        cell.set_linewidth(0)
+        if (col == 0):
+            cell.set_text_props(fontproperties=FontProperties(weight='bold'))
+        if row == 0:
+            cell._text.set_fontsize(14)
+            cell.set_facecolor('lightgrey')
+            cell.set_height(.08)
+        if col==0 and row>=1:
+            colorIdx = row%len(mem.c)
+            cell._text.set_color(mem.c[row-1])
+
+
     the_table.auto_set_column_width([-1,-1,-1,-1,-1,-1,-1,-1])
     the_table.auto_set_font_size(True)
-    the_table.scale(4,2)
-    ax1.set_xlim([0.6*np.array(mem.minimumX).min(),1.4*np.array(mem.maximumX).max()])
-    ax1.set_ylim([0.6*np.array(mem.minimumY).min(),1.4*np.array(mem.maximumY).max()])
+    # the_table.set_fontsize(18)
+    the_table.scale(1, 0.25)
+    ax1.set_xlim([0.6*np.array(mem.minimumX).min(), 1.4*np.array(mem.maximumX).max()])
+    ax1.set_ylim([max(0.6*np.array(mem.minimumY).min(), 1.e-7), 1.4*np.array(mem.maximumY).max()])
     ax1.grid(which='both', linestyle='--',color='0.8')
 
 
     ax1.set_ylabel(unitsDict[mem.microMacro.get()], fontsize=legendFontSize)
     ax1.set_xlabel("Energy (eV)", fontsize=legendFontSize)
     ax1.set_title(unitsDict[mem.microMacro.get()], fontsize=legendFontSize+2)
-    ax1.legend(loc=3, prop={'size':legendFontSize})
     ax1.tick_params(labelsize=legendFontSize-2)
+    if len(mem.plotTitles) >5:
+        ax1.legend(loc=3, prop={'size':legendFontSize/1.5})
+    else:
+        ax1.legend(loc=3, prop={'size':legendFontSize})
 
     # Create pie charts of cross section values at each energy only if plotting all x-sects (allFlag=True)
     pieList = [mem.plotTherm, mem.plotFiss, mem.plotFus, mem.plotUser]
@@ -1241,7 +1320,6 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
                 sl = sorted([(si,li) for si,li in sl if si>=0.05], reverse=True)
                 ax.pie(sorted(sizes,reverse=True))
                 ax.axis('equal')
-                box = ax.get_position()
                 ax.legend(prop={'size':legendFontSize}, bbox_to_anchor=[0.75+i*0.1, 0.15], labels=['%1.1f %%, %s' % (s,l) for s,l in sl])
                 ax.set_title(titleList[i])
 
@@ -1260,16 +1338,25 @@ def plotMe2(event=None, allFlag=False, saveFlag=False):
 
 
     if saveFlag==True:
-        if not os.path.exists('figs'):
-            os.mkdir('figs')
-        pdf = mem.savePDF('figs/'+mem.plotTitles[0][:7]+'.pdf')
+        if not os.path.exists(saveDir):
+            os.mkdir(saveDir)
+        name = []
+        for p in mem.plotTitles:
+            name.append(p.replace(' ','_'))
+        name = '__'.join(name)
+        if len(np.unique(isotopes)) == 1 and len(isotopes) >1:
+            isotope = np.unique(isotopes)[0]
+            el = isotope.split('-')[0]
+            if mem.allListMasterMaster[el][isotope]==mem.plotTitles:
+                name = '%s_All'%(isotope)
+        pdf = mem.savePDF('%s/%s.pdf'%(saveDir, name))
         pdf.savefig(figImg)
         pdf.close()
     else:
         pl.show()
 
 
-def plotDecay():
+def plotDecay(saveFlag=False, saveDir='figs'):
     '''
     This function will plot decay data
     '''
@@ -1287,8 +1374,9 @@ def plotDecay():
         'e- anti-neutrinos': ['|', 60*ps, 0.5, 'violet'],
         'e- neutrinos': ['-', 60*ps, 0.5, 'slategray']}
 
-    fig = pl.figure('Radioactive Decay', figsize=(12,8))
-    ax = fig.add_subplot(111)
+    fig = pl.figure('Radioactive Decay', figsize=(15,8))
+    # ax = fig.add_subplot(111)
+    ax = pl.subplot2grid((1,2), (0, 0))
     ax.set_axisbelow(True)
 
     i = 0
@@ -1297,12 +1385,18 @@ def plotDecay():
     ms = 70
     snapData = []
     titles = []
-    minX, maxX, minY, maxY = ([] for i in range(4))
+    minX, maxX, minY, maxY, cellText, tableColors = ([] for i in range(6))
+    avgE, maxE = ({} for i in range(2))
+    xData = None
     for k,v in mem.decaySummary.iteritems():
         if k in ['Half Life', 'Decay Modes', u'T-\xbd','isotope']:
             continue
         xData = [vi[0] for vi in v]
         yData = [vi[1] for vi in v]
+        totFrac = np.sum([j[1] for j in mem.decaySummary[k]])
+        avgE[k] = np.sum([j[0]*j[1]/totFrac for j in mem.decaySummary[k]])
+        maxE[k] = max(i[0] for i in mem.decaySummary[k])
+        cellText.append(['%s'%(k), '%.3e'%(avgE[k]), '%.3e'%(maxE[k])])
         minX.append(min(xData))
         minY.append(min(yData))
         maxX.append(max(xData))
@@ -1311,29 +1405,69 @@ def plotDecay():
         titles.append(k)
         colorIdx = i%len(mem.c)
         c = mem.c[colorIdx]
+        tableColors.append(pDict[k][3])
         pl.scatter(xData, yData, marker=pDict[k][0], s=pDict[k][1], alpha=pDict[k][2], facecolors=pDict[k][3], edgecolors='k', label=k)
 
         i += 1
 
+    if not xData:
+        return None
+    # Table
+    columnText = ['Particle', r'$E_{avg}\ (eV)$', r'$E_{max}\ (eV)$']
+    tableFormat = [1.05, 1-0.06*(len(titles)+1), 1.2, 0.06*(len(titles)+1)]
+    the_table = ax.table(cellText=cellText,
+                        loc = 'right',
+                        colWidths = [0.25, 0.25, 0.25],
+                        colLabels = columnText,
+                        colLoc = 'center',
+                        rowLoc = 'center',
+                        cellLoc = 'center',
+                        bbox = tableFormat)
+
+    for (row, col), cell in the_table.get_celld().items():
+        cell.set_linewidth(0)
+        if (row == 0) or (col == 0):
+            cell.set_text_props(color='k')
+        if row==0:
+            cell.set_facecolor('lightgrey')
+        if col == 0 and row >= 1:
+            colorIdx = i%len(mem.c)
+            cell._text.set_color(tableColors[row-1])
+            cell.set_text_props(fontweight='bold')
+
+    the_table.auto_set_column_width([-1, -1, -1])
+    the_table.auto_set_font_size(True)
+    the_table.scale(4,2)
+
     val, unit = getDecayUnits(mem.decaySummary[u'T-\xbd'][0])
     fs = 20
     fw = 'bold'
-    pl.legend(loc=3, fontsize=fs-4)
+    pl.legend(loc=3, fontsize=fs/2., markerscale=1)
     if val>1000:
-        pl.title(u'%s\nT-\xbd = %.3e %s'%(mem.decaySummary['isotope'], val, unit), fontsize=fs, fontweight=fw)
+        titleString = u'%s\n$T_{\xbd} = %.3e\ %s$'%(mem.decaySummary['isotope'], val, unit)
     else:
-        pl.title(u'%s\nT-\xbd = %.3f %s'%(mem.decaySummary['isotope'], val, unit), fontsize=fs, fontweight=fw)
+        titleString = u'%s\n$T_{\xbd} = %.3f\ %s$'%(mem.decaySummary['isotope'], val, unit)
+    pl.suptitle(titleString, fontsize=fs, fontweight=fw)
     pl.xlabel('Energy (eV)', fontsize=fs-4)
     pl.ylabel('Probability per decay', fontsize=fs-4)
     ax.set_xlim([0.1*min(minX), 6*max(maxX)])
     ax.set_ylim([0.1*min(minY), 6*max(maxY)])
     pl.grid(which='both', linestyle='--',color='0.9')
+    pl.subplots_adjust(wspace=0, hspace=0)
 
     if mem.Cursor_var.get():
         cursor = SnapToCursor(ax, snapData, fig.canvas, titles, (0.1, 0.9), 'prob')
         pl.connect('motion_notify_event', cursor.mouse_move)
 
-    pl.show()
+    if saveFlag==True:
+        if not os.path.exists(saveDir):
+            os.mkdir(saveDir)
+        name = '%s_decay'%(mem.decaySummary['isotope'])
+        pdf = mem.savePDF('%s/%s.pdf'%(saveDir,name))
+        pdf.savefig(fig)
+        pdf.close()
+    else:
+        pl.show()
 
 #===========================================================
 #  This function unzips NNDCD ENDF files, and extracts each
@@ -1800,7 +1934,21 @@ def getDecayUnits(d):
 
 def displayAnalysis(event=None):
     def dictToArray(dict,num):
-        a = sorted(dict.items(), key=operator.itemgetter(num))
+        if num == 2:
+            outList = []
+            a = sorted(dict.items(), key=operator.itemgetter(0))
+            elements = np.unique([i[0].split('-')[0] for i in a]).tolist()
+            dicElements = {}
+            for el in elements:
+                dicElements[el] = [i for i in a if i[0].split('-')[0]==el]
+                dicElements[el] = sorted(dicElements[el], key = lambda x: x[1], reverse=True)
+            a = [vi for k,v in sorted(dicElements.iteritems()) for vi in v]
+
+        elif num == 1:
+            a = sorted(dict.items(), key=operator.itemgetter(num), reverse=True)
+
+        elif num == 0:
+            a = sorted(dict.items(), key=operator.itemgetter(num))
         a = np.array(a)
         return a
 
@@ -1847,19 +1995,22 @@ def displayAnalysis(event=None):
 
         mem.resultsText.delete('1.0', END)
         if mem.microMacro.get() == 1:
-            mem.resultsText.insert(INSERT, u"Isotope         \u03a3(1/cm)\n")
+            mem.resultsText.insert(INSERT, u"   Isotope      \u03a3(1/cm)\n\n")
         elif mem.microMacro.get() == 2:
-            mem.resultsText.insert(INSERT, u"Isotope         Mean_Free_Path(cm)\n")
+            mem.resultsText.insert(INSERT, u"   Isotope      Mean_Free_Path(cm)\n\n")
         elif mem.microMacro.get() == 3:
-            mem.resultsText.insert(INSERT, u"Isotope         \u03a3/\u03c1(cm^2/g)\n")
+            mem.resultsText.insert(INSERT, u"   Isotope      \u03a3/\u03c1(cm^2/g)\n\n")
         else:
-            mem.resultsText.insert(INSERT, u"Isotope         \u03c3(barns)\n")
+            mem.resultsText.insert(INSERT, u"   Isotope      \u03c3(barns)\n\n")
 
         for i in range(len(mem.resultsToPrint)):
             if isinstance(mem.resultsToPrint[i,1], basestring):
                 mem.resultsText.insert(INSERT, '%3i %-10s %8.4e\n' %(i+1, mem.resultsToPrint[i,0],float(mem.resultsToPrint[i,1]))) #'%2s%3s' % (MF, MT)
             else:
                 mem.resultsText.insert(INSERT, '%3i %-10s %8.4e\n' %(i+1, mem.resultsToPrint[i,0],float(mem.resultsToPrint[i,1]))) #'%2s%3s' % (MF, MT)
+            if mem.sortBy.get() in [0, 2] and i< len(mem.resultsToPrint)-1:
+                if mem.resultsToPrint[i+1,0].split('-')[0] !=mem.resultsToPrint[i,0].split('-')[0]:
+                    mem.resultsText.insert(INSERT, '\n')
 
 #===========================================================
 #   Process all raw ENDF files with NJOY
@@ -2076,6 +2227,8 @@ def clearAll(event=None):
     mem.logText.delete('1.0', END)
     logTxtAndPrint('Plots cleared.\n')
     mem.batchFile = None
+    for k,v in mem.multiLibDic.iteritems():
+        mem.multiLibDic[k] = []
 
 def makeMixList(*args):
     master_list(mem.tab02)
@@ -2252,6 +2405,7 @@ def initializeVariables():
     mem.alphaList = []
     mem.xrayList = []
     mem.gammaList = []
+    mem.multiLibDic = {}
 
     mem.decayTypeDict = {
         'Gamma': mem.gammaDict,
@@ -2266,14 +2420,13 @@ def initializeVariables():
         'e- anti-neutrinos': mem.antiNeutrinoDict,
         'e- neutrinos': mem.neutrinoDict}
 
-mem.halfLifeScale = {
+    mem.halfLifeScale = {
         'sec':[0., 60.],
         'min':[60., 3600.],
         'hrs':[3600., 86400.],
         'days':[86400., 2.592e6],
         'months':[2.592e6, 3.1536e7],
         'years':[3.1536e7, 1.e99]}
-
 
 
 def makeWidgets(root):
@@ -2348,8 +2501,8 @@ def makeWidgets(root):
 
     mem.sortBy_frame = Frame(mem.tab01, width=mem.rootWidth, height=50, pady=7)#, relief=GROOVE, borderwidth=2)
     mem.sortBy_frame.columnconfigure(0, weight=1)
-    mem.sortByXS_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/6, height=52, padx=20, text='Sort analysis')
-    mem.sortByE_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/4, height=52, padx=20, text='Analysis energy')
+    mem.sortByXS_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/3.8, height=52, padx=20, text='Sort analysis')
+    mem.sortByE_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/5, height=52, padx=20, text='Analysis energy')
     mem.sortDecay_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/2.5, height=52, padx=20, text='Decay Analysis')
     # mem.mix_frame = Frame(mem.sortBy_frame, width= 200, height=50, padx=20)
 
@@ -2403,6 +2556,7 @@ def makeWidgets(root):
             mem.downloadList[ver] = IntVar()
             cb = Checkbutton(mem.download_frame, variable=mem.downloadList[ver], text='%-15s'%(ver), font=mem.HDG1)
             cb.grid(row=0, column=i)
+            mem.multiLibDic[ver] = []
 
     mem.selectAll_btn = Button(mem.download_frame,text='Select All',command=selectAll,font=mem.HDG1)
     mem.selectAll_btn.grid(row=1, column=1)
@@ -2480,7 +2634,7 @@ def makeWidgets(root):
     # mem.Analyze_btn = Button(mem.userMT_frame, width=10, text = 'Analyze All', command=lambda tab01=mem.tab01:master_list(mem.tab01),padx=2,font=mem.HDG1)
     mem.SaveAnalysis_Btn = Button(mem.userMT_frame, width=13, text='Save Analysis', command=saveText,padx=2,font=mem.HDG1)
     mem.SavePlotData_Btn = Button(mem.userMT_frame, width=15, text='Save Plot Data', command=savePlotData,padx=2,font=mem.HDG1)
-    mem.RunBatch_Btn = Button(mem.userMT_frame, width=10, text='Batch', command=runBatch, padx=2, font=mem.HDG1)
+    mem.RunBatch_Btn = Button(mem.userMT_frame, width=10, text='Batch', command=lambda root=root: runBatch(root), padx=2, font=mem.HDG1)
     mem.Plot_Btn = Button(mem.userMT_frame, width=10, text='Plot', command=plotMe2, padx=2, font=mem.HDG1)
     mem.Cursor_var = IntVar()
     mem.Cursor = Checkbutton(mem.userMT_frame, variable=mem.Cursor_var, text='Cursor', font=mem.HDG1)
@@ -2500,8 +2654,10 @@ def makeWidgets(root):
     mem.sortBy = IntVar()
     mem.sortByName = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=0,text='by isotope',command=displayAnalysis,font=mem.HDG1)
     mem.sortByXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=1,text='by value',command=displayAnalysis,font=mem.HDG1)
+    mem.sortByNameThenXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=2,text='by isotope, then value',command=displayAnalysis,font=mem.HDG1)
     mem.sortByName.grid(row=0,column=0)
     mem.sortByXS.grid(row=0,column=1)
+    mem.sortByNameThenXS .grid(row=0, column=2)
 
     mem.eRange = IntVar()
     mem.eRangeTh = Radiobutton(mem.sortByE_frame,variable=mem.eRange,value=0,text='Th',command=displayAnalysis,font=mem.HDG1)
@@ -2592,113 +2748,505 @@ def makeWidgets(root):
     # Launch batch mode if input file is provided
     if options.batchFile:
         mem.batchFile = options.batchFile
-        runBatch()
+        runBatch(root)
     else:
         mem.batchFile = None
 
 
 
-def runBatch():
+def runBatch(root):
+    from matplotlib.backends.backend_pdf import PdfPages as savePDF
+    mem.savePDF = savePDF
+
+    def writeTexIndexStyleFile():
+        '''
+        This makes a nicely-formatted index for LaTexFiles
+        '''
+        with open('index_style.ist', 'w') as f:
+            f.write('headings_flag 1\n')
+            f.write(r'heading_prefix "{\\large\\rmfamily\\bfseries "'+'\n')
+            f.write(r'heading_suffix "}\\nopagebreak\n"'+'\n')
+            f.write(r'delim_0 " \\dotfill "'+'\n')
+            f.write(r'delim_1 " \\dotfill "'+'\n')
+            f.write(r'delim_2 " \\dotfill "'+'\n')
+
+    def allXS(plotType, dirs):
+
+        writeTexIndexStyleFile()
+        flag_pOrM_master = False
+        saveFlag_master = True
+        allFlag_master = True
+        loopList = []
+        log = []
+        if plotType == 'decay':
+            mem.note1.select(2)
+            for k,v in sorted(mem.masterTracker[plotType].iteritems()):
+                loopList.append(sorted(v.keys()))
+            loopList = [item for sublist in loopList for item in sublist]
+            dir = [d for d in dirs if 'decay' in d][0]
+            for i, isotope in enumerate(loopList, start=1):
+                try:
+                    get_decay_data(isotope, dir, miniParse=True)
+                    plotDecay(saveFlag=True, saveDir=saveDir)
+                except:
+                    log.append(isotope)
+            for i, iLog in enumerate(log):
+                print i, iLog
+            return None
+
+        elif plotType =='pointwise' or plotType =='multigroup':
+            mem.note1.select(0)
+            if plotType=='multigroup':
+                flag_pOrM_master = True
+                mem.note1.select(1)
+            for k0, v0 in sorted(mem.masterTracker[plotType].iteritems()):
+                for k1, v1 in sorted(mem.masterTracker[plotType][k0].iteritems()):
+                    try:
+                        getInfo2(v1, flag_pOrM_master, allFlag_master)
+                        plotMe2(None, allFlag_master, saveFlag_master, saveDir=saveDir)
+                    except:
+                        pass
+                    clearAll()
+
+
+    def allAnalyze(lib, dataType, reportType):
+        writeTexIndexStyleFile()
+
+        def addBody(s, caption):
+            b = r'''
+                \begin{center}
+                \begin{longtable}[p]{ccc}
+                \caption{%s.}\\
+                \hyperref[index]{Index} / \hyperlink{page.1}{TOC}\\
+                \hline
+                \index{%s}
+                \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                \hline
+                \endfirsthead
+                \multicolumn{3}{c}
+                {\tablename\ \thetable\ -- \textit{Continued from previous page}} \\
+                \hline
+                \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                \hline
+                \endhead
+                \hline \multicolumn{3}{c}{\textit{Continued on next page}} \\
+                \endfoot
+                \hline
+                \endlastfoot
+                '''%(caption[1], caption[1])
+
+            c = r'''
+            '''
+            for i, si in enumerate(s.split('\n')):
+                si = si.split()
+                if len(si)>1:
+                    c += \
+                    r'''
+                    %s & %s & %s \\'''%(si[0], si[1], si[2])
+                else:
+                    c += \
+                    r'''\\'''
+
+            c +=r'''
+            \end{longtable}
+            \end{center}
+            \newpage
+            '''
+            return b+c
+
+
+        sortByDic = {
+            0: 'By isotope',
+            1: 'By value',
+            2: 'By isotope then by value'}
+
+        eRangeDic = {
+            0: 'Thermal',
+            1: 'Fission',
+            2: 'Fusion',
+            3: 'User'}
+
+        if type == 'multigroup':
+            mem.note1.select(1)
+        else:
+            mem.note1.select(0)
+        MTlist = sorted([int(mt) for mt in mtdic2.keys() if int(mt) <=107])
+        MTlist.append('849')
+        MTlist.append('999')
+        MTlist = [str(mt) for mt in MTlist]
+
+        top, tail = texTopAndTail(lib, dataType, reportType)
+
+        body = r''''''
+
+        energiesNum = 3 if float(mem.Select_E1.get()) == 0. else 4
+        for i, MT in enumerate(MTlist):
+            mem.Select_MT.set(mtdic2[MT])
+            master_list(mem.tab01)
+            for energy in range(energiesNum):
+                mem.eRange.set(energy)
+                for sortBy in range(3):
+                    mem.sortBy.set(sortBy)
+                    displayAnalysis()
+                    caption = [i, '%s.%s.%s'%(mtdic2[MT].replace('_',' ').capitalize(), eRangeDic[energy], sortByDic[sortBy])]
+                    body += addBody(mem.resultsText.get('3.0',END), caption)
+
+
+        tex = top + body + tail
+        outputFileName = 'texAnalysis_%s.tex'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
+
+        with open(outputFileName, 'w') as f:
+            f.write(tex)
+        for iTex in range(2): # compile twice
+            sp.check_call(['pdflatex', outputFileName])
+        return None
+
+
+
     if mem.batchFile == None:
+        root.update()
         batchFile = tkFileDialog.askopenfilename()
     else:
         batchFile = mem.batchFile
-    # with open(tkFileDialog.askopenfilename()) as f:
+
     with open(batchFile,'r') as f:
-        lines = f.readlines()
-    f.close()
+        tmp = f.readlines()
+        lines = []
+        for line in tmp:
+            lines.append(line.strip())
+
     commentLines = [i for (i,l) in enumerate(lines) if l[0]=='#']
     for cl in commentLines[::-1]:
         lines.pop(cl)
-    # exec(lines[0])
-    i=0
-    tmp = {}
-    for k,v in sorted(dirDict2.iteritems()):
-        tmp[k]=i; i+=1
 
-    if lines[0].strip() in sorted(dirDict2.keys()):
-        if not mem.verSelect.get()==tmp[lines[0].strip()]:
-            mem.verSelect.set(tmp[lines[0].strip()])
+    tmp = {}
+    for i, (k,v) in enumerate(sorted(dirDict2.iteritems())):
+        tmp[k]=i
+
+    saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
+
+    libDict = {}
+    dataType = None
+    reportType = None
+    for line in lines:
+        if line in dirDict2.keys():
+            lib = line
+            libDict[line] = {}
+            libDict[lib]['save'] = []
+        elif 'E=' in line or 'E =' in line:
+            libDict[lib]['E'] = float(line.split('=')[-1])
+            libDict[lib]['xs'] = []
+        elif line == 'save':
+            libDict[lib]['save'].append(libDict[lib]['xs'])
+            libDict[lib]['xs'] = []
+        elif 'all' in line.split()[0]:
+            if not mem.verSelect.get()==tmp[lib]:
+                mem.verSelect.set(tmp[lib])
+                update_files()
+            dataType = line.split()[-1]
+            reportType = 'All Reactions'
+            allXS(dataType, dirDict2[lib])
+            for iTex in range(2): # compile 2x for hyperrefs
+                texBatchPlot(saveDir, lib, dataType, reportType)
+            return None
+        elif 'analysis' in line.split()[0]:
+            if not mem.verSelect.get()==tmp[lib]:
+                mem.verSelect.set(tmp[lib])
+                update_files()
+            dataType = line.split()[-1]
+            reportType = 'Analysis'
+            allAnalyze(lib, dataType, reportType)
+            return None
+        else:
+            libDict[lib]['xs'].append(line)
+
+    for k,v in libDict.iteritems():
+        if not mem.verSelect.get()==tmp[k]:
+            mem.verSelect.set(tmp[k])
             update_files()
 
-    lines.pop(0)
-    mem.logText.delete('1.0', END)
-    # mem.logText.insert(INSERT, 'Batch processing: %s\n'%(batchFile))
-    logTxtAndPrint('Batch processing: %s\n'%(batchFile))
+        logTxtAndPrint('Writing out all available isotopes and reactions for %s.'%(lib))
+        with open('zz_all_%s.txt'%(lib.replace('/','_').replace('-','_')), 'w') as f:
+            for k_el, v_iso in sorted(mem.allListMasterMaster.iteritems()):
+                for iso, xs in sorted(v_iso.iteritems()):
+                    for item in sorted(xs):
+                        f.write('%s\n'%item)
 
-    saveFlag_master = flag_pOrM_master = allFlag_master = False
-    saveFlag = flag_pOrM = allFlag = False
-    if 'E' in lines[0]:
-        mem.Select_E1.set(lines[0].split('=')[1].split()[0])
-        popLast = True
-    if 'save' or 'all' in lines[0]:
-        from matplotlib.backends.backend_pdf import PdfPages as savePDF
-        mem.savePDF = savePDF
-        saveFlag_master = True
-        print 'save master'
-        popLast = True
-    if 'm' in lines[0]:
-        flag_pOrM_master = True
-        mem.note1.select(1)
-        print 'pOrM master'
-        popLast = True
-
-    if 'all' in lines[0]:
-        allFlag = True
-        for key in sorted(mem.allListMasterMaster):
-            for key1 in sorted(mem.allListMasterMaster[key]):
-                print key1
-                getInfo2(mem.allListMasterMaster[key][key1], flag_pOrM_master, allFlag_master)
-                plotMe2(None, allFlag_master, saveFlag_master)
-                clearAll()
-    elif 'rank' in lines[0]:
-        print 'rank mode'
-        lines.pop(0)
-        for line in lines:
-            if line.split()[0] in list(mem.tmpList):
-                mem.Select_MT.set(line.split()[0])
-                master_list(mem.note1.index("current"))
-                saveText()
-
-    else:
-        if popLast:
-            lines.pop(0)
-        for line in lines:
-            if line.split()[0] in mem.isotopesMTdict.keys() and line.split()[1] in mem.isotopesMTdict[line.split()[0]]:
-                if not flag_pOrM_master:
-                    if 'm' in line.split():
-                        flag_pOrM = True
-                        mem.note1.select(1)
-                    else:
-                        flag_pOrM = False
-                        mem.note1.select(0)
-                else:
+        mem.Select_E1.set(libDict[k]['E'])
+        for xsList in libDict[k]['save']:
+            for xs in xsList:
+                flag_pOrM = False
+                allFlag = False
+                saveFlag = True
+                mem.note1.select(0)
+                if 'm' in xs.split():
                     flag_pOrM = True
-
-                if not saveFlag_master:
-                    if 'save' in line.split():
-                        saveFlag = True
-                    else:
-                        saveFlag = False
-                else:
-                    saveFlag = True
-
-                if 'all' in line.split():
+                    mem.note1.select(1)
+                if 'all' in xs.split():
                     allFlag = True
-                    line = mem.allListMaster[line.split()[0]]
+                    el = xs.split('-')[0]
+                    iso = xs.split()[0]
+                    xs = mem.allListMasterMaster[el][iso]
+                    logTxtAndPrint('batch analysis: %s %s'%(lib, xs))
+                    getInfo2(xs, flag_pOrM, allFlag)
+                    continue
                 else:
-                    allFlag = False
-                    line = [' '.join(line.split()[:2])]
-                getInfo2(line, flag_pOrM, allFlag)
-                # plotMe2(None, allFlag, saveFlag)
-                # clearAll()
-            else:
-                print line.split()[0], 'not found'
-                continue
-        plotMe2(None, allFlag, saveFlag)
-        # clearAll()
+                    xs = ' '.join(xs.split()[0:2])
+                    logTxtAndPrint('batch analysis: %s %s'%(lib, xs))
+                    getInfo2([xs], flag_pOrM, allFlag)
+
+            # from matplotlib.backends.backend_pdf import PdfPages as savePDF
+            # mem.savePDF = savePDF
+            plotMe2(None, allFlag, saveFlag, saveDir=saveDir)
+            clearAll()
+            mem.Select_E1.set(libDict[k]['E'])
+        for iTex in range(2): # compile 2x for hyperrefs
+            texBatchPlot(saveDir, lib, dataType, reportType)
 
 
+def texTopAndTail(endf, dataType, reportType):
+        texTop = r'''
+        \documentclass{article}
+        \usepackage{graphicx}
+        \usepackage{pdflscape}
+        \usepackage[margin=0.8in]{geometry}
+        \usepackage{longtable}
+        \usepackage{fancyhdr}
+        \usepackage{imakeidx}
+        \makeindex[columns=2, title={Alphabetical Index\label{index}},options={-s index_style.ist}, intoc]
+        \usepackage{hyperref}
+        \hypersetup{
+            colorlinks=true,
+            linkcolor=blue,
+            filecolor=magenta,
+            urlcolor=cyan
+        }
+        \usepackage[utf8]{inputenc}
+        \usepackage[T1]{fontenc}
+        \usepackage[mmddyyyy]{datetime}
+        \fancyhead{}
+        \fancyfoot{}
+        \fancyhead[CO,CE]{---    Compiled by EXSAN    ---}
+        \fancyfoot[C]{EXSAN}
+        \fancyfoot[R] {\thepage}
+        \begin{document}
+        \title{ENDF Cross Section \& Nuclear Data Analysis \\
+        \large \url{https://github.com/lanl/EXSAN}}
+        \maketitle
+        \pagestyle{fancy}
+        \thispagestyle{fancy}
+        \tableofcontents
+        \listoffigures
+        \listoftables
+        \newpage
+        \section{Details}
+        \begin{tabular}{ll}
+        Date: & \today \\
+        ENDF Library: & %s \\
+        Data Type: & %s \\
+        Report Type: & %s \\
+        \end{tabular}\\ \\ \\
+        \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
+        \newpage
+        \section{Plots, Tables, and Data}
+        '''%(endf, dataType, reportType)
+
+        texTail = r'''
+        \printindex
+        \hyperlink{page.1}{TOC}
+        \end{document}
+        '''
+        return texTop, texTail
+
+#===========================================================
+# Write LaTeX file containing plots from batch file
+#===========================================================
+
+def texBatchPlot(figDir, lib, dataType, reportType):
+    '''
+    This module writes a LaTeX file that assembles all of the figures
+    from a batch run, and adds an alphabetical index with hyperlinks
+    at the end.
+
+    Helpful links:
+        https://es.overleaf.com/learn/latex/hyperlinks
+        https://www.overleaf.com/learn/latex/Indices
+        https://texblog.org/2007/11/07/headerfooter-in-latex-with-fancyhdr/
+    '''
+
+    def addBody(s):
+        '''
+        Add lines for an individual figure including caption, index
+        labels, and and a hyperlink to the Index. This is useful for
+        very large files!
+        '''
+        contents = s.split('/')[-1].split('.')[0].split('__')
+        label = '.'.join(contents)
+        contentsCaption = r''''''
+        indexList = []
+        print s
+        for c in contents:
+            iso, xs = c.split('_')[0:2]
+            if c.split('_') == 3:
+                mg = c.split('_')[-1]
+            el, mass = iso.split('-')
+            contentsCaption += \
+            r'''\textsuperscript{%s}%s %s, '''%(mass, el, xs)
+            indexList.append(r'''%s %s'''%(iso, xs))
+
+        b = \
+        r'''
+        \begin{landscape}
+        \begin{centering}
+        \begin{figure}
+          \includegraphics[width=1.0\linewidth]{%s}
+          \caption{%s}'''%(s, contentsCaption)
+
+        c = r''''''
+        for item in indexList:
+            c += \
+            r'''
+            \index{%s}'''%(item)
+
+        b += c
+        b += \
+        r'''
+          \label{fig:%s}
+        \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
+        \end{figure}
+        \end{centering}
+        \end{landscape}
+        '''%(label)
+        return b
+
+
+    #===========================================================
+    # list of figures output by EXSAN's batch analysis
+    #===========================================================
+    figs = glob('%s/*'%(figDir))
+    outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
+
+
+    #===========================================================
+    # Top and bottom of the tex file
+    #===========================================================
+    top, tail = texTopAndTail(lib, dataType, reportType)
+
+
+    #===========================================================
+    # Body of the tex file, one for each figure
+    #===========================================================
+    body = r''''''
+    for fig in sorted(figs):
+        body += addBody(fig)
+
+    #===========================================================
+    # Make and write the entire tex file and PDF
+    #===========================================================
+    tex = top + body + tail
+
+    with open(outputFileName, 'w') as f:
+        f.write(tex)
+    sp.check_call(['pdflatex', outputFileName])
+    return
+
+
+
+#===========================================================
+# Write LaTeX file for analysis
+#===========================================================
+def texAnalysis(figDir, lib, datatype, reportType):
+    '''
+    This module writes a LaTeX file that assembles all of the analyses
+    and sort options.
+
+    Helpful links:
+        https://texblog.org/2011/05/15/multi-page-tables-using-longtable/
+    '''
+
+    def addBody(s):
+        '''
+        Add lines for an individual figure including caption, index
+        labels, and and a hyperlink to the Index. This is useful for
+        very large files!
+        '''
+        contents = s.split('/')[-1].split('.')[0].split('__')
+        label = '.'.join(contents)
+        contentsCaption = r''''''
+        indexList = []
+        print s
+        for c in contents:
+            iso, xs = c.split('_')[0:2]
+            if c.split('_') == 3:
+                mg = c.split('_')[-1]
+            el, mass = iso.split('-')
+            contentsCaption += \
+            r'''\textsuperscript{%s}%s %s, '''%(mass, el, xs)
+            indexList.append(r'''%s %s'''%(iso, xs))
+
+        b = \
+        r'''
+        \begin{landscape}
+        \begin{centering}
+        \begin{figure}
+          \includegraphics[width=1.0\linewidth]{%s}
+          \caption{%s}'''%(s, contentsCaption)
+
+        c = r''''''
+        for item in indexList:
+            c += \
+            r'''
+            \index{%s}'''%(item)
+
+        b += c
+        b += \
+        r'''
+          \label{fig:%s}
+        \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
+        \end{figure}
+        \end{centering}
+        \end{landscape}
+        '''%(label)
+        return b
+
+
+    #===========================================================
+    # list of figures output by EXSAN's batch analysis
+    #===========================================================
+    figs = glob('%s/*'%(figDir))
+    outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
+
+
+    #===========================================================
+    # Top and bottom of the tex file
+    #===========================================================
+    top, tail = texTopAndTail(lib, datatype, reportType)
+
+
+    #===========================================================
+    # Body of the tex file, one for each figure
+    #===========================================================
+    body = r''''''
+    for fig in sorted(figs):
+        body += addBody(fig)
+
+    #===========================================================
+    # Make and write the entire tex file and PDF
+    #===========================================================
+    tex = top + body + tail
+
+    with open(outputFileName, 'w') as f:
+        f.write(tex)
+    sp.check_call(['pdflatex', outputFileName])
+    return
+
+
+
+
+
+#===========================================================
+# create a symlink for the NJOY2016 executable file
+#===========================================================
 def linkNjoy():
     if not os.path.isdir('working'):
         os.mkdir('working')
@@ -2714,7 +3262,9 @@ def linkNjoy():
             print 'NJOY soft link created'
         return
 
-
+#===========================================================
+# Update the log file and log Text area of the GUI
+#===========================================================
 def logTxtAndPrint(s):
     s = s.encode('utf-8')
     mem.logText.insert(END, s)
@@ -2742,7 +3292,7 @@ def main():
     banner +="                   |  _|  \  /\___ \ / _ \ |  \| |\n"
     banner +="                   | |___ /  \ ___) / ___ \| |\  |\n"
     banner +="                   |_____/_/\_\____/_/   \_\_| \_|\n"
-    banner +="\n-- The (E)NDF (C)ross (S)ection (An)alysis and visualization appication --\n"
+    banner +="\n-- The (E)NDF (C)ross (S)ection (An)alysis and visualization application --\n"
     banner +="                             Created by:\n"
     banner +="                    H. Omar Wooten, PhD, DABR\n"
     banner +="                          hasani@lanl.gov\n"
