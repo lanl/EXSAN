@@ -2792,7 +2792,7 @@ def runBatch(root):
                     log.append(isotope)
             for i, iLog in enumerate(log):
                 print i, iLog
-            return None
+
 
         elif plotType =='pointwise' or plotType =='multigroup':
             mem.note1.select(0)
@@ -2923,7 +2923,7 @@ def runBatch(root):
     for i, (k,v) in enumerate(sorted(dirDict2.iteritems())):
         tmp[k]=i
 
-    saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
+
 
     libDict = {}
     dataType = None
@@ -2940,6 +2940,7 @@ def runBatch(root):
             libDict[lib]['save'].append(libDict[lib]['xs'])
             libDict[lib]['xs'] = []
         elif 'all' in line.split()[0]:
+            saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
             if not mem.verSelect.get()==tmp[lib]:
                 mem.verSelect.set(tmp[lib])
                 update_files()
@@ -2948,15 +2949,14 @@ def runBatch(root):
             allXS(dataType, dirDict2[lib])
             for iTex in range(2): # compile 2x for hyperrefs
                 texBatchPlot(saveDir, lib, dataType, reportType)
-            return None
         elif 'analysis' in line.split()[0]:
+            saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
             if not mem.verSelect.get()==tmp[lib]:
                 mem.verSelect.set(tmp[lib])
                 update_files()
             dataType = line.split()[-1]
             reportType = 'Analysis'
             allAnalyze(lib, dataType, reportType)
-            return None
         else:
             libDict[lib]['xs'].append(line)
 
@@ -2972,6 +2972,7 @@ def runBatch(root):
                     for item in sorted(xs):
                         f.write('%s\n'%item)
 
+        saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
         mem.Select_E1.set(libDict[k]['E'])
         for xsList in libDict[k]['save']:
             for xs in xsList:

@@ -1,2 +1,0 @@
-ENDF/B-VIII.0
-all decay
