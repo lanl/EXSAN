@@ -595,7 +595,8 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
     if miniParse:
         mem.decaySummary = copy(decaySummary)
         mem.decaySummary['isotope']=iso
-        return
+
+        return decaySummary
 
     mem.resultsText.delete('1.0', END)
     mem.resultsText.insert(INSERT, '     -- Radioactive Decay Summary: %s --\n\n'%(iso))
@@ -608,6 +609,7 @@ def get_decay_data(iso, dir, MF=8, MT=457, miniParse=False):
 
     mem.resultsText.insert(INSERT, '='*50+'\n\n')
 
+    mem.decayPlotButton['state'] = 'normal'
     for k,v in decaySummary.iteritems():
         # if k==u'T-\u00BD': # already printing half life at the top of the summary
         #     continue
@@ -1792,6 +1794,7 @@ def master_list(tab):
                 mem.decayOpt['state'] = 'normal'
                 mem.decaySortName['state'] = 'normal'
                 mem.decaySortEnergy['state'] = 'normal'
+                mem.decaySortIsotopeEnergy['state'] = 'normal'
                 mem.decaySortOccurrence['state'] = 'normal'
                 mem.decay_analysis_opt.set(sorted(mem.decayTypeDict.keys())[0])
             dirTmp = '/'.join(file.split('/')[:-1])
@@ -1952,30 +1955,57 @@ def displayAnalysis(event=None):
         a = np.array(a)
         return a
 
-    def dictToTuples(dict):
-        tuples = []
-        for k,v in dict.iteritems():
-            if type(v) == float:
-                tuples.append((k, v))
-            elif len(v) == 2:
-                tuples.append((k, v[0], v[1]))
-        return tuples
+    def dictToTuples(dict, num):
+        if num==2:
+            a = sorted(dict.items(), key=operator.itemgetter(0))
+            elements = np.unique([i[0].split('-')[0] for i in a]).tolist()
+            dicElements = {}
+            for el in elements:
+                if mem.decay_analysis_opt.get() == 'Half Life':
+                    dicElements[el] = [(i[0], i[1]) for i in a if i[0].split('-')[0]==el]
+                else:
+                    dicElements[el] = [(i[0], i[1][0], i[1][1]) for i in a if i[0].split('-')[0]==el]
+
+                dicElements[el] = sorted(dicElements[el], key = lambda x: x[1], reverse=True)
+            # a = [(vi, float(dict[vi][0]), float(dict[vi][1])) for k,v in sorted(dicElements.iteritems(), key=operator.itemgetter(1)) for vi in v]
+            a = [vi for k,v in sorted(dicElements.iteritems()) for vi in v]
+            return a
+        else:
+            tuples = []
+            for k,v in dict.iteritems():
+                if type(v) == float:
+                    tuples.append((k, v))
+                elif len(v) == 2:
+                    tuples.append((k, v[0], v[1]))
+            return tuples
 
     if mem.Select_MT.get() == 'radioactive_decay':
         if mem.decay_analysis_opt.get()=='Half Life':
             mem.decaySortEnergy['text'] = u'T-\xbd'
+            mem.decaySortIsotopeEnergy['text'] = u'Isotope, then T-\xbd'
             mem.decaySortOccurrence.configure(state='disabled')
         else:
-            mem.decaySortEnergy['text'] = 'Energy'
+            mem.decaySortEnergy['text'] = 'eV'
             mem.decaySortOccurrence.configure(state='normal')
 
-        results = sorted(dictToTuples(mem.decayTypeDict[mem.decay_analysis_opt.get()]), key=lambda x: x[mem.decaySort.get()])
+        results = dictToTuples(mem.decayTypeDict[mem.decay_analysis_opt.get()], mem.decaySort.get())
+        if not mem.decaySort.get() == 2:
+            if mem.decaySort.get() == 3:
+                results = sorted(results, key=lambda x: x[2], reverse=True)
+            elif mem.decaySort.get() == 0:
+                results = sorted(results, key=lambda x: x[mem.decaySort.get()])
+            else:
+                results = sorted(results, key=lambda x: x[mem.decaySort.get()], reverse=True)
+
         mem.resultsText.delete('1.0', END)
         if len(results[0]) == 2:
             mem.resultsText.insert(INSERT, u'%15s %15s\n\n'%('Isotope',u'T-\xbd'))
         elif len(results[0]) == 3:
             mem.resultsText.insert(INSERT, '%15s %15s %15s\n\n'%('Isotope','E (eV)', 'Fraction'))
+
+        j=-1
         for i, r in enumerate(results, start=1):
+            j+=1
             if len(r) == 2:
                 value, unit = getDecayUnits(r[1])
                 if value >=1000. and unit=='years':
@@ -1984,6 +2014,10 @@ def displayAnalysis(event=None):
                     mem.resultsText.insert(INSERT, '%4i %10s %15.3f %8s\n'%(i, r[0], value, unit))
             if len(r) == 3:
                 mem.resultsText.insert(INSERT, '%4i %10s %15.3e %15.3e\n'%(i, r[0], r[1], r[2]))
+
+            if mem.decaySort.get() in [0, 2] and j< len(results)-1:
+                if results[j][0].split('-')[0] !=results[j+1][0].split('-')[0]:
+                    mem.resultsText.insert(INSERT, '\n')
 
 
     else:# mem.Select_MT.get() == 'xs':
@@ -2501,9 +2535,9 @@ def makeWidgets(root):
 
     mem.sortBy_frame = Frame(mem.tab01, width=mem.rootWidth, height=50, pady=7)#, relief=GROOVE, borderwidth=2)
     mem.sortBy_frame.columnconfigure(0, weight=1)
-    mem.sortByXS_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/3.8, height=52, padx=20, text='Sort analysis')
+    mem.sortByXS_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/5, height=52, padx=20, text='Sort analysis by')
     mem.sortByE_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/5, height=52, padx=20, text='Analysis energy')
-    mem.sortDecay_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/2.5, height=52, padx=20, text='Decay Analysis')
+    mem.sortDecay_frame = LabelFrame(mem.sortBy_frame, width=mem.rootWidth/2, height=52, padx=20, text='Decay Analysis')
     # mem.mix_frame = Frame(mem.sortBy_frame, width= 200, height=50, padx=20)
 
     mem.dataText_frame = Frame(mem.tab01, width=mem.rootWidth/2, height=50, relief=GROOVE, borderwidth=2)
@@ -2652,9 +2686,9 @@ def makeWidgets(root):
     mem.Cursor.grid(row=0, column=7)
 
     mem.sortBy = IntVar()
-    mem.sortByName = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=0,text='by isotope',command=displayAnalysis,font=mem.HDG1)
-    mem.sortByXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=1,text='by value',command=displayAnalysis,font=mem.HDG1)
-    mem.sortByNameThenXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=2,text='by isotope, then value',command=displayAnalysis,font=mem.HDG1)
+    mem.sortByName = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=0,text='Isotope',command=displayAnalysis,font=mem.HDG1)
+    mem.sortByXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=1,text=u'\u03c3', font=mem.HDG1, command=displayAnalysis)
+    mem.sortByNameThenXS = Radiobutton(mem.sortByXS_frame, variable=mem.sortBy, value=2,text=u'Isotope, then \u03c3',command=displayAnalysis,font=mem.HDG1)
     mem.sortByName.grid(row=0,column=0)
     mem.sortByXS.grid(row=0,column=1)
     mem.sortByNameThenXS .grid(row=0, column=2)
@@ -2678,22 +2712,26 @@ def makeWidgets(root):
 
     mem.decaySortName = Radiobutton(mem.sortDecay_frame,variable=mem.decaySort,value=0,text='Isotope',command=displayAnalysis,font=mem.HDG1)
 
-    mem.decaySortEnergy = Radiobutton(mem.sortDecay_frame,variable=mem.decaySort,value=1,text='Energy',command=displayAnalysis,font=mem.HDG1)
+    mem.decaySortEnergy = Radiobutton(mem.sortDecay_frame,variable=mem.decaySort,value=1,text='eV',command=displayAnalysis,font=mem.HDG1)
 
-    mem.decaySortOccurrence =    Radiobutton(mem.sortDecay_frame,variable=mem.decaySort,value=2,text='Freq',command=displayAnalysis,font=mem.HDG1)
+    mem.decaySortIsotopeEnergy = Radiobutton(mem.sortDecay_frame,variable=mem.decaySort,value=2,text='Isotope, then eV',command=displayAnalysis,font=mem.HDG1)
+
+    mem.decaySortOccurrence =    Radiobutton(mem.sortDecay_frame,variable=mem.decaySort,value=3,text='P(E)',command=displayAnalysis,font=mem.HDG1)
 
     mem.decayPlotButton = Button(mem.sortDecay_frame, text='Plot Decay', command=plotDecay)
 
-    mem.decayOpt.configure(width=10, state='disabled')
-    mem.decaySortName.configure(width=10, state='disabled')
-    mem.decaySortEnergy.configure(width=10, state='disabled')
-    mem.decaySortOccurrence.configure(width=10, state='disabled')
-    mem.decayPlotButton.configure(width=10, state='disabled')
+    mem.decayOpt.configure(state='disabled', width=10)
+    mem.decaySortName.configure(state='disabled')
+    mem.decaySortEnergy.configure(state='disabled')
+    mem.decaySortIsotopeEnergy.configure(state='disabled')
+    mem.decaySortOccurrence.configure(state='disabled')
+    mem.decayPlotButton.configure(state='disabled')
     mem.decayOpt.grid(row=0,column=0)
     mem.decaySortName.grid(row=0,column=1)
     mem.decaySortEnergy.grid(row=0,column=2)
-    mem.decaySortOccurrence.grid(row=0,column=3)
-    mem.decayPlotButton.grid(row=0, column=4)
+    mem.decaySortIsotopeEnergy.grid(row=0,column=3)
+    mem.decaySortOccurrence.grid(row=0,column=4)
+    mem.decayPlotButton.grid(row=0, column=5)
 
 
     mem.mix = IntVar()
