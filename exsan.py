@@ -2893,6 +2893,9 @@ def runBatch(root):
             return b+c
 
 
+
+
+
         sortByDic = {
             0: 'By isotope',
             1: 'By value',
@@ -2904,30 +2907,69 @@ def runBatch(root):
             2: 'Fusion',
             3: 'User'}
 
-        if type == 'multigroup':
-            mem.note1.select(1)
-        else:
-            mem.note1.select(0)
-        MTlist = sorted([int(mt) for mt in mtdic2.keys() if int(mt) <=107])
-        MTlist.append('849')
-        MTlist.append('999')
-        MTlist = [str(mt) for mt in MTlist]
+        tabDict = {
+            'pointwise' : 0,
+            'multigroup': 1,
+            'decay'     : 2}
+
+        decaySortOpts = [
+            mem.decaySortName,
+            mem.decaySortEnergy,
+            mem.decaySortIsotopeEnergy,
+            mem.decaySortOccurrence]
 
         top, tail = texTopAndTail(lib, dataType, reportType)
-
         body = r''''''
 
-        energiesNum = 3 if float(mem.Select_E1.get()) == 0. else 4
-        for i, MT in enumerate(MTlist):
-            mem.Select_MT.set(mtdic2[MT])
+        mem.note1.select(tabDict[dataType])
+
+        if dataType == 'decay':
+            mem.Select_MT.set('radioactive_decay')
             master_list(mem.tab01)
-            for energy in range(energiesNum):
-                mem.eRange.set(energy)
-                for sortBy in range(3):
-                    mem.sortBy.set(sortBy)
+            decayOptsDict = {}
+            for i, opt in enumerate(mem.decayTypeDict.keys()):
+                mem.decay_analysis_opt.set(opt)
+                try:
                     displayAnalysis()
-                    caption = [i, '%s.%s.%s'%(mtdic2[MT].replace('_',' ').capitalize(), eRangeDic[energy], sortByDic[sortBy])]
-                    body += addBody(mem.resultsText.get('3.0',END), caption)
+                except:
+                    continue
+                # displayAnalysis()
+                opts = {}
+                for j, sortOpt in enumerate(decaySortOpts):
+                    if not sortOpt['state'] == 'disabled':
+                        opts[j] = sortOpt['text']
+                decayOptsDict[i] = opts
+                print i, opt, opts
+
+            for i, j in enumerate(mem.decayTypeDict.keys()):
+                if not i in decayOptsDict.keys():
+                    continue
+                mem.decay_analysis_opt.set(j)
+                for k,v in sorted(decayOptsDict[i].iteritems()):
+                    mem.decaySort.set(k)
+                    displayAnalysis()
+                    print '%s %s'%(j, v)
+                    print  mem.resultsText.get('3.0',END)
+            st()
+
+
+        else:
+            MTlist = sorted([int(mt) for mt in mtdic2.keys() if int(mt) <=107])
+            MTlist.append('849')
+            MTlist.append('999')
+            MTlist = [str(mt) for mt in MTlist]
+
+            energiesNum = 3 if float(mem.Select_E1.get()) == 0. else 4
+            for i, MT in enumerate(MTlist):
+                mem.Select_MT.set(mtdic2[MT])
+                master_list(mem.tab01)
+                for energy in range(energiesNum):
+                    mem.eRange.set(energy)
+                    for sortBy in range(3):
+                        mem.sortBy.set(sortBy)
+                        displayAnalysis()
+                        caption = [i, '%s.%s.%s'%(mtdic2[MT].replace('_',' ').capitalize(), eRangeDic[energy], sortByDic[sortBy])]
+                        body += addBody(mem.resultsText.get('3.0',END), caption)
 
 
         tex = top + body + tail
