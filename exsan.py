@@ -2853,37 +2853,107 @@ def runBatch(root):
         def addBody(s, caption):
             b = r'''
                 \begin{center}
-                \begin{longtable}[p]{ccc}
-                \caption{%s.}\\
+                \begin{longtable}[p]{|c|ccc||c|ccc|}
+                \caption{%s}\\
+                \label{%s}
                 \hyperref[index]{Index} / \hyperlink{page.1}{TOC}\\
                 \hline
                 \index{%s}
-                \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                \textbf{Item} & \textbf{Isotope} & \textbf{Energy (eV)} & \textbf{P(decay)} &
+                \textbf{Item} & \textbf{Isotope} & \textbf{Energy (eV)} & \textbf{P(decay)}\\
                 \hline
                 \endfirsthead
                 \multicolumn{3}{c}
                 {\tablename\ \thetable\ -- \textit{Continued from previous page}} \\
                 \hline
-                \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                \textbf{Item} & \textbf{Isotope} & \textbf{Energy (eV)} & \textbf{P(decay)} &
+                \textbf{Item} & \textbf{Isotope} & \textbf{Energy (eV)} & \textbf{P(decay)}\\
                 \hline
                 \endhead
-                \hline \multicolumn{3}{c}{\textit{Continued on next page}} \\
+                \hline \multicolumn{8}{l}{\textit{Continued on next page.} \hyperref[%s]{      Top of this table.}} \\
                 \endfoot
                 \hline
                 \endlastfoot
-                '''%(caption[1], caption[1])
+                '''%(caption[1], caption[1], caption[1], caption[1])
+
+
 
             c = r'''
             '''
-            for i, si in enumerate(s.split('\n')):
-                si = si.split()
-                if len(si)>1:
-                    c += \
-                    r'''
-                    %s & %s & %s \\'''%(si[0], si[1], si[2])
-                else:
-                    c += \
-                    r'''\\'''
+            rows = 45
+            cols = 2
+            sLen = len(s.split('\n'))
+            pages = sLen/(rows*cols)
+            if sLen%(rows*cols)>0:
+                pages += 1
+            tallyTot = 0
+
+            s = s.split('\n')
+            for p in range(pages-1):
+                for i in range(rows):
+                    if len(s[tallyTot+i].split()) >1:
+                        si = s[tallyTot+i].split()
+                        c += \
+                        r'''
+                        %s & %s & %s & %s & '''%(si[0], si[1], si[2], si[3])
+                    else:
+                        c +=\
+                        r'''& & & & '''
+
+                    if len(s[tallyTot+rows+i].split())>1:
+                        si = s[tallyTot+rows+i].split()
+                        c +=r'''%s & %s & %s & %s \\ '''%(si[0], si[1], si[2], si[3])
+                    else:
+                        c +=\
+                        r'''& & &  \\ '''
+                    tmp = tallyTot+rows+i+1
+                tallyTot = tmp
+
+            numLastPage = sLen-tallyTot
+            colsLastPage = 1
+            if numLastPage%(rows*cols) > 0:
+                colsLastPage +=1
+            numLastCol = numLastPage%rows
+
+            if colsLastPage > 1:
+                for i in range(numLastCol):
+                    try:
+                        if len(s[tallyTot+i].split()) >1:
+                            si = s[tallyTot+i].split()
+                            c += \
+                            r'''
+                            %s & %s & %s & %s &  &  &  & \\'''%(si[0], si[1], si[2], si[3])
+                        else:
+                            c +=\
+                            r'''& & & & & & &  \\'''
+                    except:
+                        pass
+
+                    try:
+                        if len(s[tallyTot+rows+i].split())>1:
+                            si = s[tallyTot+rows+i].split()
+                            c +=r'''%s & %s & %s & %s &  &  &  & \\ '''%(si[0], si[1], si[2], si[3])
+                        else:
+                            c +=\
+                            r'''& & & & & & &  \\ '''
+                    except:
+                        pass
+                    tmp = tallyTot+rows+i+1
+                tallyTot = tmp
+
+            try:
+                for i in range(rows-numLastCol):
+                    if len(s[tallyTot+i].split()) >1:
+                        si = s[tallyTot+i].split()
+                        c += \
+                        r'''
+                        %s & %s & %s & %s & & & & \\ '''%(si[0], si[1], si[2], si[3])
+                    else:
+                        c +=\
+                        r'''  & & & & & & &\\ '''
+            except:
+                pass
+
 
             c +=r'''
             \end{longtable}
@@ -2950,8 +3020,9 @@ def runBatch(root):
                     displayAnalysis()
                     print '%s %s'%(j, v)
                     print  mem.resultsText.get('3.0',END)
-            st()
 
+                    caption = [i, '%s.%s'%(j, v)]
+                    body += addBody(mem.resultsText.get('3.0',END), caption)
 
         else:
             MTlist = sorted([int(mt) for mt in mtdic2.keys() if int(mt) <=107])
@@ -2972,7 +3043,8 @@ def runBatch(root):
                         body += addBody(mem.resultsText.get('3.0',END), caption)
 
 
-        tex = top + body + tail
+        tex = top.encode('ascii','ignore') + body.encode('ascii','ignore') + tail.encode('ascii','ignore')
+
         outputFileName = 'texAnalysis_%s.tex'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
 
         with open(outputFileName, 'w') as f:
@@ -3377,8 +3449,8 @@ def main():
     banner +="                             Created by:\n"
     banner +="                    H. Omar Wooten, PhD, DABR\n"
     banner +="                          hasani@lanl.gov\n"
-    banner +="            Copyright Los Alamos National Laboratory, 2018 \n"
-    banner +="        Los Alamos National Laboratory Computer Code LA-CC-19-002\n"
+    banner +="         Copyright Los Alamos National Laboratory, 2018 \n"
+    banner +="    Los Alamos National Laboratory Computer Code LA-CC-19-002\n"
     print banner
     root = Tk()
     root.title('EXSAN 1.0')
