@@ -2876,6 +2876,88 @@ def runBatch(root):
                     \hline
                     \endlastfoot
                     '''%(caption[1], caption[1], caption[1], caption[1])
+
+                c = r'''
+                '''
+                rows = [52, 54] # rows on page 1 of table, on subsequent pages
+                cols = 2
+                sLen = len(s.split('\n'))
+                pages = 1+(sLen-(rows[0]*cols))/(rows[1]*cols)
+                if (sLen-(rows[0]*cols))%(rows[1]*cols)>0:
+                    pages += 1
+
+                tallyTot = 0
+
+                s = s.split('\n')
+                for p in range(pages-1):
+                    iRows = rows[0] if p==0 else rows[1]
+
+                    for i in range(iRows):
+                        if len(s[tallyTot+i].split()) >1:
+                            si = s[tallyTot+i].split()
+                            c += \
+                            r'''
+                            %s & %s & %s & %s & '''%(si[0], si[1], si[2], si[3])
+                        else:
+                            c +=\
+                            r'''& & & & '''
+
+                        if len(s[tallyTot+iRows+i].split())>1:
+                            si = s[tallyTot+iRows+i].split()
+                            c +=r'''%s & %s & %s & %s \\ '''%(si[0], si[1], si[2], si[3])
+                        else:
+                            c +=\
+                            r'''& & &  \\ '''
+                        tmp = tallyTot+iRows+i+1
+                    tallyTot = tmp
+
+                numLastPage = sLen-tallyTot
+                colsLastPage = 1
+                if numLastPage > rows[1]:
+                    colsLastPage +=1
+                numLastCol = numLastPage%rows[1]
+
+                if colsLastPage > 1:
+                    iRows = rows[0] if p==0 else rows[1]
+
+                    for i in range(numLastCol):
+                        try:
+                            if len(s[tallyTot+i].split()) >1:
+                                si = s[tallyTot+i].split()
+                                c += \
+                                r'''
+                                %s & %s & %s & %s &  &  &  & \\'''%(si[0], si[1], si[2], si[3])
+                            else:
+                                c +=\
+                                r'''& & & & & & &  \\'''
+                        except:
+                            pass
+
+                        try:
+                            if len(s[tallyTot+iRows+i].split())>1:
+                                si = s[tallyTot+iRows+i].split()
+                                c +=r'''%s & %s & %s & %s &  &  &  & \\ '''%(si[0], si[1], si[2], si[3])
+                            else:
+                                c +=\
+                                r'''& & & & & & &  \\ '''
+                        except:
+                            pass
+                        tmp = tallyTot+iRows+i+1
+                    tallyTot = tmp
+
+                try:
+                    for i in range(iRows-numLastCol):
+                        if len(s[tallyTot+i].split()) >1:
+                            si = s[tallyTot+i].split()
+                            c += \
+                            r'''
+                            %s & %s & %s & %s & & & & \\ '''%(si[0], si[1], si[2], si[3])
+                        else:
+                            c +=\
+                            r'''  & & & & & & &\\ '''
+                except:
+                    pass
+
             else:
                 b = r'''
                     \begin{center}
@@ -2899,88 +2981,17 @@ def runBatch(root):
                     \endlastfoot
                     '''%(caption[1], caption[1])
 
-
-
-            c = r'''
-            '''
-            rows = [52, 54] # rows on page 1 of table, on subsequent pages
-            cols = 2
-            sLen = len(s.split('\n'))
-            pages = 1+(sLen-(rows[0]*cols))/(rows[1]*cols)
-            if (sLen-(rows[0]*cols))%(rows[1]*cols)>0:
-                pages += 1
-
-            tallyTot = 0
-
-            s = s.split('\n')
-            for p in range(pages-1):
-                iRows = rows[0] if p==0 else rows[1]
-
-                for i in range(iRows):
-                    if len(s[tallyTot+i].split()) >1:
-                        si = s[tallyTot+i].split()
+                c = r'''
+                '''
+                for i, si in enumerate(s.split('\n')):
+                    si = si.split()
+                    if len(si)>1:
                         c += \
                         r'''
-                        %s & %s & %s & %s & '''%(si[0], si[1], si[2], si[3])
+                        %s & %s & %s \\'''%(si[0], si[1], si[2])
                     else:
-                        c +=\
-                        r'''& & & & '''
-
-                    if len(s[tallyTot+iRows+i].split())>1:
-                        si = s[tallyTot+iRows+i].split()
-                        c +=r'''%s & %s & %s & %s \\ '''%(si[0], si[1], si[2], si[3])
-                    else:
-                        c +=\
-                        r'''& & &  \\ '''
-                    tmp = tallyTot+iRows+i+1
-                tallyTot = tmp
-
-            numLastPage = sLen-tallyTot
-            colsLastPage = 1
-            if numLastPage > rows[1]:
-                colsLastPage +=1
-            numLastCol = numLastPage%rows[1]
-
-            if colsLastPage > 1:
-                iRows = rows[0] if p==0 else rows[1]
-
-                for i in range(numLastCol):
-                    try:
-                        if len(s[tallyTot+i].split()) >1:
-                            si = s[tallyTot+i].split()
-                            c += \
-                            r'''
-                            %s & %s & %s & %s &  &  &  & \\'''%(si[0], si[1], si[2], si[3])
-                        else:
-                            c +=\
-                            r'''& & & & & & &  \\'''
-                    except:
-                        pass
-
-                    try:
-                        if len(s[tallyTot+iRows+i].split())>1:
-                            si = s[tallyTot+iRows+i].split()
-                            c +=r'''%s & %s & %s & %s &  &  &  & \\ '''%(si[0], si[1], si[2], si[3])
-                        else:
-                            c +=\
-                            r'''& & & & & & &  \\ '''
-                    except:
-                        pass
-                    tmp = tallyTot+iRows+i+1
-                tallyTot = tmp
-
-            try:
-                for i in range(iRows-numLastCol):
-                    if len(s[tallyTot+i].split()) >1:
-                        si = s[tallyTot+i].split()
                         c += \
-                        r'''
-                        %s & %s & %s & %s & & & & \\ '''%(si[0], si[1], si[2], si[3])
-                    else:
-                        c +=\
-                        r'''  & & & & & & &\\ '''
-            except:
-                pass
+                        r'''\\'''
 
 
             c +=r'''
@@ -3050,7 +3061,7 @@ def runBatch(root):
                     print  mem.resultsText.get('3.0',END)
 
                     caption = [i, '%s.%s'%(j, v)]
-                    body += addBody(mem.resultsText.get('3.0',END), caption)
+                    body += addBody(mem.resultsText.get('3.0',END), caption, decayType=decayType)
 
         else:
             MTlist = sorted([int(mt) for mt in mtdic2.keys() if int(mt) <=107])
