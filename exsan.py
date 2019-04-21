@@ -2854,22 +2854,23 @@ def runBatch(root):
             b = r'''
                 \begin{center}
                 \begin{longtable}[p]{|c|ccc||c|ccc|}
-                \caption{%s} \hyperref[index]{Index} / \hyperlink{page.1}{TOC} \label{%s} \index{%s}\\
+                \caption{%s} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
                 \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
                 \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
                 \multicolumn{1}{c|}{\textbf{Item}} &
                 \multicolumn{1}{c}{\textbf{Isotope}} &
                 \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
                 \endfirsthead
-                \multicolumn{8}{c}
-                {\tablename\ \thetable\ -- \textit{Continued from previous page}} \\
+                \multicolumn{4}{l}
+                {\tablename\ \thetable\ -- \textit{Continued from previous page}} & \multicolumn{4}{r}
+                {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
                 \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
                 \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
                 \multicolumn{1}{c|}{\textbf{Item}} &
                 \multicolumn{1}{c}{\textbf{Isotope}} &
                 \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
                 \endhead
-                \hline \multicolumn{8}{r}{\textit{Continued on next page.} \hyperref[%s]{Top of this table.}} \\
+                \hline \multicolumn{8}{r}{\textit{Continued on next page.}} \\
                 \endfoot
                 \hline
                 \endlastfoot
