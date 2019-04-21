@@ -2850,31 +2850,54 @@ def runBatch(root):
     def allAnalyze(lib, dataType, reportType):
         writeTexIndexStyleFile()
 
-        def addBody(s, caption):
-            b = r'''
-                \begin{center}
-                \begin{longtable}[p]{|c|ccc||c|ccc|}
-                \caption{%s} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
-                \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
-                \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
-                \multicolumn{1}{c|}{\textbf{Item}} &
-                \multicolumn{1}{c}{\textbf{Isotope}} &
-                \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
-                \endfirsthead
-                \multicolumn{4}{l}
-                {\tablename\ \thetable\ -- \textit{Continued from previous page}} & \multicolumn{4}{r}
-                {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
-                \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
-                \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
-                \multicolumn{1}{c|}{\textbf{Item}} &
-                \multicolumn{1}{c}{\textbf{Isotope}} &
-                \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
-                \endhead
-                \hline \multicolumn{8}{r}{\textit{Continued on next page.}} \\
-                \endfoot
-                \hline
-                \endlastfoot
-                '''%(caption[1], caption[1], caption[1], caption[1])
+        def addBody(s, caption, dataType=None):
+            if dataType == 'decay':
+                b = r'''
+                    \begin{center}
+                    \begin{longtable}[p]{|c|ccc||c|ccc|}
+                    \caption{%s} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
+                    \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                    \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
+                    \multicolumn{1}{c|}{\textbf{Item}} &
+                    \multicolumn{1}{c}{\textbf{Isotope}} &
+                    \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
+                    \endfirsthead
+                    \multicolumn{4}{l}
+                    {\tablename\ \thetable\ -- \textit{Continued from previous page}} & \multicolumn{4}{r}
+                    {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
+                    \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                    \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
+                    \multicolumn{1}{c|}{\textbf{Item}} &
+                    \multicolumn{1}{c}{\textbf{Isotope}} &
+                    \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
+                    \endhead
+                    \hline \multicolumn{8}{r}{\textit{Continued on next page.}} \\
+                    \endfoot
+                    \hline
+                    \endlastfoot
+                    '''%(caption[1], caption[1], caption[1], caption[1])
+            else:
+                b = r'''
+                    \begin{center}
+                    \begin{longtable}[p]{ccc}
+                    \caption{%s.}\\
+                    \hyperref[index]{Index} / \hyperlink{page.1}{TOC}\\
+                    \hline
+                    \index{%s}
+                    \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                    \hline
+                    \endfirsthead
+                    \multicolumn{3}{c}
+                    {\tablename\ \thetable\ -- \textit{Continued from previous page}} \\
+                    \hline
+                    \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                    \hline
+                    \endhead
+                    \hline \multicolumn{3}{c}{\textit{Continued on next page}} \\
+                    \endfoot
+                    \hline
+                    \endlastfoot
+                    '''%(caption[1], caption[1])
 
 
 
