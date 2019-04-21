@@ -2962,24 +2962,25 @@ def runBatch(root):
                 b = r'''
                     \begin{center}
                     \begin{longtable}[p]{ccc}
-                    \caption{%s.}\\
-                    \hyperref[index]{Index} / \hyperlink{page.1}{TOC}\\
+                    \caption{%s.} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
                     \hline
                     \index{%s}
                     \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
                     \hline
                     \endfirsthead
-                    \multicolumn{3}{c}
-                    {\tablename\ \thetable\ -- \textit{Continued from previous page}} \\
+                    \multicolumn{2}{c}
+                    {\tablename\ \thetable\ -- \textit{Continued from previous page}} &
+                    \multicolumn{1}{r}
+                    {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
                     \hline
                     \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
                     \hline
                     \endhead
-                    \hline \multicolumn{3}{c}{\textit{Continued on next page}} \\
+                    \hline \multicolumn{3}{r}{\textit{Continued on next page}} \\
                     \endfoot
                     \hline
                     \endlastfoot
-                    '''%(caption[1], caption[1])
+                    '''%(caption[1], caption[1], caption[1], caption[1], caption[1])
 
                 c = r'''
                 '''
