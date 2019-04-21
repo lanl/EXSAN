@@ -2867,7 +2867,7 @@ def runBatch(root):
                 \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
                 \multicolumn{1}{c|}{\textbf{Item}} &
                 \multicolumn{1}{c}{\textbf{Isotope}} &
-                \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c}{\textbf{P(decay)}} \\ \hline
+                \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
                 \endhead
                 \hline \multicolumn{8}{r}{\textit{Continued on next page.} \hyperref[%s]{Top of this table.}} \\
                 \endfoot
@@ -2879,17 +2879,20 @@ def runBatch(root):
 
             c = r'''
             '''
-            rows = 45
+            rows = [52, 54] # rows on page 1 of table, on subsequent pages
             cols = 2
             sLen = len(s.split('\n'))
-            pages = sLen/(rows*cols)
-            if sLen%(rows*cols)>0:
+            pages = 1+(sLen-(rows[0]*cols))/(rows[1]*cols)
+            if (sLen-(rows[0]*cols))%(rows[1]*cols)>0:
                 pages += 1
+
             tallyTot = 0
 
             s = s.split('\n')
             for p in range(pages-1):
-                for i in range(rows):
+                iRows = rows[0] if p==0 else rows[1]
+
+                for i in range(iRows):
                     if len(s[tallyTot+i].split()) >1:
                         si = s[tallyTot+i].split()
                         c += \
@@ -2899,22 +2902,24 @@ def runBatch(root):
                         c +=\
                         r'''& & & & '''
 
-                    if len(s[tallyTot+rows+i].split())>1:
-                        si = s[tallyTot+rows+i].split()
+                    if len(s[tallyTot+iRows+i].split())>1:
+                        si = s[tallyTot+iRows+i].split()
                         c +=r'''%s & %s & %s & %s \\ '''%(si[0], si[1], si[2], si[3])
                     else:
                         c +=\
                         r'''& & &  \\ '''
-                    tmp = tallyTot+rows+i+1
+                    tmp = tallyTot+iRows+i+1
                 tallyTot = tmp
 
             numLastPage = sLen-tallyTot
             colsLastPage = 1
-            if numLastPage%(rows*cols) > 0:
+            if numLastPage > rows[1]:
                 colsLastPage +=1
-            numLastCol = numLastPage%rows
+            numLastCol = numLastPage%rows[1]
 
             if colsLastPage > 1:
+                iRows = rows[0] if p==0 else rows[1]
+
                 for i in range(numLastCol):
                     try:
                         if len(s[tallyTot+i].split()) >1:
@@ -2929,19 +2934,19 @@ def runBatch(root):
                         pass
 
                     try:
-                        if len(s[tallyTot+rows+i].split())>1:
-                            si = s[tallyTot+rows+i].split()
+                        if len(s[tallyTot+iRows+i].split())>1:
+                            si = s[tallyTot+iRows+i].split()
                             c +=r'''%s & %s & %s & %s &  &  &  & \\ '''%(si[0], si[1], si[2], si[3])
                         else:
                             c +=\
                             r'''& & & & & & &  \\ '''
                     except:
                         pass
-                    tmp = tallyTot+rows+i+1
+                    tmp = tallyTot+iRows+i+1
                 tallyTot = tmp
 
             try:
-                for i in range(rows-numLastCol):
+                for i in range(iRows-numLastCol):
                     if len(s[tallyTot+i].split()) >1:
                         si = s[tallyTot+i].split()
                         c += \
@@ -3201,6 +3206,7 @@ def texTopAndTail(endf, dataType, reportType):
         \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
         \newpage
         \section{Plots, Tables, and Data}
+        \newpage
         '''%(endf, dataType, reportType)
 
         texTail = r'''
