@@ -3062,7 +3062,7 @@ def runBatch(root):
                     print  mem.resultsText.get('3.0',END)
 
                     caption = [i, '%s.%s'%(j, v)]
-                    body += addBody(mem.resultsText.get('3.0',END), caption, decayType=decayType)
+                    body += addBody(mem.resultsText.get('3.0',END), caption, dataType=dataType)
 
         else:
             MTlist = sorted([int(mt) for mt in mtdic2.keys() if int(mt) <=107])
@@ -3085,12 +3085,25 @@ def runBatch(root):
 
         tex = top.encode('ascii','ignore') + body.encode('ascii','ignore') + tail.encode('ascii','ignore')
 
-        outputFileName = 'texAnalysis_%s.tex'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
+        # outputFileName = 'texAnalysis_%s.tex'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
+        # outputFileName = 'Report_Anaysis_Pointwise.tex'
+
+        # construct output file name
+        lib = lib.replace('/','').replace('.','').replace('-','')
+        outputFileName = '_'.join(['Report_Analysis', dataType.capitalize(), lib])
+        outputFileName = '%s_%s.tex'%(outputFileName, datetime.datetime.now().strftime("%Y%m%d%H%M"))
 
         with open(outputFileName, 'w') as f:
             f.write(tex)
         for iTex in range(2): # compile twice
             sp.check_call(['pdflatex', outputFileName])
+        texFiles = [f for f in glob('%s.*'%(outputFileName.split('.')[0])) if not 'pdf' in f]
+
+        if not os.path.isdir('texDump'):
+            os.system('mkdir texDump')
+
+        for f in texFiles:
+            os.system('mv %s texDump'%(f))
         return None
 
 
@@ -3139,8 +3152,8 @@ def runBatch(root):
             dataType = line.split()[-1]
             reportType = 'All Reactions'
             allXS(dataType, dirDict2[lib])
-            for iTex in range(2): # compile 2x for hyperrefs
-                texBatchPlot(saveDir, lib, dataType, reportType)
+            # for iTex in range(2): # compile 2x for hyperrefs
+            texBatchPlot(saveDir, lib, dataType, reportType)
         elif 'analysis' in line.split()[0]:
             saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
             if not mem.verSelect.get()==tmp[lib]:
@@ -3193,8 +3206,8 @@ def runBatch(root):
             plotMe2(None, allFlag, saveFlag, saveDir=saveDir)
             clearAll()
             mem.Select_E1.set(libDict[k]['E'])
-        for iTex in range(2): # compile 2x for hyperrefs
-            texBatchPlot(saveDir, lib, dataType, reportType)
+        # for iTex in range(2): # compile 2x for hyperrefs
+        texBatchPlot(saveDir, lib, dataType, reportType)
 
 
 def texTopAndTail(endf, dataType, reportType):
@@ -3319,7 +3332,15 @@ def texBatchPlot(figDir, lib, dataType, reportType):
     #===========================================================
     figs = glob('%s/*'%(figDir))
     outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
+    outputFileName = 'Report_Plots_Pointwise_All_ENDFBVIII0.tex'
 
+    # construct file name
+    lib = lib.replace('/','').replace('.','').replace('-','')
+    dateTime = figDir.split('_')[1]
+    reportType = reportType.replace(' ','')
+    dataType = dataType.capitalize()
+    outputFileName = '_'.join(['Report_Plots', dataType, reportType, lib])
+    outputFileName = '%s_%s.tex'%(outputFileName, datetime.datetime.now().strftime("%Y%m%d%H%M"))
 
     #===========================================================
     # Top and bottom of the tex file
@@ -3341,98 +3362,108 @@ def texBatchPlot(figDir, lib, dataType, reportType):
 
     with open(outputFileName, 'w') as f:
         f.write(tex)
-    sp.check_call(['pdflatex', outputFileName])
-    return
+
+    for i in range(2):
+        sp.check_call(['pdflatex', outputFileName])
+    texFiles = [f for f in glob('%s.*'%(outputFileName.split('.')[0])) if not 'pdf' in f]
+    if not os.path.isdir('texDump'):
+        os.system('mkdir texDump')
+    for f in texFiles:
+        os.system('mv %s texDump'%(f))
+    return None
 
 
 
-#===========================================================
-# Write LaTeX file for analysis
-#===========================================================
-def texAnalysis(figDir, lib, datatype, reportType):
-    '''
-    This module writes a LaTeX file that assembles all of the analyses
-    and sort options.
-
-    Helpful links:
-        https://texblog.org/2011/05/15/multi-page-tables-using-longtable/
-    '''
-
-    def addBody(s):
-        '''
-        Add lines for an individual figure including caption, index
-        labels, and and a hyperlink to the Index. This is useful for
-        very large files!
-        '''
-        contents = s.split('/')[-1].split('.')[0].split('__')
-        label = '.'.join(contents)
-        contentsCaption = r''''''
-        indexList = []
-        print s
-        for c in contents:
-            iso, xs = c.split('_')[0:2]
-            if c.split('_') == 3:
-                mg = c.split('_')[-1]
-            el, mass = iso.split('-')
-            contentsCaption += \
-            r'''\textsuperscript{%s}%s %s, '''%(mass, el, xs)
-            indexList.append(r'''%s %s'''%(iso, xs))
-
-        b = \
-        r'''
-        \begin{landscape}
-        \begin{centering}
-        \begin{figure}
-          \includegraphics[width=1.0\linewidth]{%s}
-          \caption{%s}'''%(s, contentsCaption)
-
-        c = r''''''
-        for item in indexList:
-            c += \
-            r'''
-            \index{%s}'''%(item)
-
-        b += c
-        b += \
-        r'''
-          \label{fig:%s}
-        \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
-        \end{figure}
-        \end{centering}
-        \end{landscape}
-        '''%(label)
-        return b
-
-
-    #===========================================================
-    # list of figures output by EXSAN's batch analysis
-    #===========================================================
-    figs = glob('%s/*'%(figDir))
-    outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
-
-
-    #===========================================================
-    # Top and bottom of the tex file
-    #===========================================================
-    top, tail = texTopAndTail(lib, datatype, reportType)
-
-
-    #===========================================================
-    # Body of the tex file, one for each figure
-    #===========================================================
-    body = r''''''
-    for fig in sorted(figs):
-        body += addBody(fig)
-
-    #===========================================================
-    # Make and write the entire tex file and PDF
-    #===========================================================
-    tex = top + body + tail
-
-    with open(outputFileName, 'w') as f:
-        f.write(tex)
-    sp.check_call(['pdflatex', outputFileName])
-    return
+# #===========================================================
+# # Write LaTeX file for analysis
+# #===========================================================
+# def texAnalysis(figDir, lib, datatype, reportType):
+#     '''
+#     This module writes a LaTeX file that assembles all of the analyses
+#     and sort options.
+#
+#     Helpful links:
+#         https://texblog.org/2011/05/15/multi-page-tables-using-longtable/
+#     '''
+#
+#     def addBody(s):
+#         '''
+#         Add lines for an individual figure including caption, index
+#         labels, and and a hyperlink to the Index. This is useful for
+#         very large files!
+#         '''
+#         contents = s.split('/')[-1].split('.')[0].split('__')
+#         label = '.'.join(contents)
+#         contentsCaption = r''''''
+#         indexList = []
+#         print s
+#         for c in contents:
+#             iso, xs = c.split('_')[0:2]
+#             if c.split('_') == 3:
+#                 mg = c.split('_')[-1]
+#             el, mass = iso.split('-')
+#             contentsCaption += \
+#             r'''\textsuperscript{%s}%s %s, '''%(mass, el, xs)
+#             indexList.append(r'''%s %s'''%(iso, xs))
+#
+#         b = \
+#         r'''
+#         \begin{landscape}
+#         \begin{centering}
+#         \begin{figure}
+#           \includegraphics[width=1.0\linewidth]{%s}
+#           \caption{%s}'''%(s, contentsCaption)
+#
+#         c = r''''''
+#         for item in indexList:
+#             c += \
+#             r'''
+#             \index{%s}'''%(item)
+#
+#         b += c
+#         b += \
+#         r'''
+#           \label{fig:%s}
+#         \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
+#         \end{figure}
+#         \end{centering}
+#         \end{landscape}
+#         '''%(label)
+#         return b
+#
+#
+#     #===========================================================
+#     # list of figures output by EXSAN's batch analysis
+#     #===========================================================
+#     figs = glob('%s/*'%(figDir))
+#     outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
+#
+#
+#     #===========================================================
+#     # Top and bottom of the tex file
+#     #===========================================================
+#     top, tail = texTopAndTail(lib, datatype, reportType)
+#
+#
+#     #===========================================================
+#     # Body of the tex file, one for each figure
+#     #===========================================================
+#     body = r''''''
+#     for fig in sorted(figs):
+#         body += addBody(fig)
+#
+#     #===========================================================
+#     # Make and write the entire tex file and PDF
+#     #===========================================================
+#     tex = top + body + tail
+#
+#     with open(outputFileName, 'w') as f:
+#         f.write(tex)
+#     sp.check_call(['pdflatex', outputFileName])
+#     texFiles = [f for f in glob('tex_%s*'%(outputfileName.split('_')[1])) if not 'pdf' in f]
+#     for f in texFiles:
+#         os.system('mv %s texDump')
+#     return None
 
 
 

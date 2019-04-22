@@ -3,58 +3,58 @@ E=2.5e3
 H-1 total
 Li-6 total
 save
-Na-23 absorption m
-F-19 absorption
-F-19 total
-O-16 (z,gamma)
-O-16 (z,gamma) m
-save
-Pu-239 absorption
-Pu-239 (z,fission)
-Pu-239 (z,gamma)
-Pu-239 (z,n)
-Pu-239 (z,2n)
-save
-U-238 all
-save
-Co-58 absorption
-Co-58 absorption m
-Co-59 absorption
-Co-59 absorption m
-save
-Co-58 all
-save
-Co-59 all
-save
-Pu-239 absorption
-U-235 absorption
-Am-241 absorption
-save
-Pu-239 (z,gamma)
-U-235 (z,gamma)
-Am-241 (z,gamma)
-save
-Pu-239 (z,n)
-U-235 (z,n)
-Am-241 (z,n)
-save
-Pu-239 (z,2n)
-U-235 (z,2n)
-Am-241 (z,2n)
-save
-W-180 absorption
-W-181 absorption
-W-182 absorption
-W-183 absorption
-W-184 absorption
-W-185 absorption
-W-186 absorption
-save
-W-180 (z,gamma)
-W-181 (z,gamma)
-W-182 (z,gamma)
-W-183 (z,gamma) m
-W-184 (z,gamma)
-W-185 (z,gamma) m
-W-186 (z,gamma)
-save
+# Na-23 absorption m
+# F-19 absorption
+# F-19 total
+# O-16 (z,gamma)
+# O-16 (z,gamma) m
+# save
+# Pu-239 absorption
+# Pu-239 (z,fission)
+# Pu-239 (z,gamma)
+# Pu-239 (z,n)
+# Pu-239 (z,2n)
+# save
+# U-238 all
+# save
+# Co-58 absorption
+# Co-58 absorption m
+# Co-59 absorption
+# Co-59 absorption m
+# save
+# Co-58 all
+# save
+# Co-59 all
+# save
+# Pu-239 absorption
+# U-235 absorption
+# Am-241 absorption
+# save
+# Pu-239 (z,gamma)
+# U-235 (z,gamma)
+# Am-241 (z,gamma)
+# save
+# Pu-239 (z,n)
+# U-235 (z,n)
+# Am-241 (z,n)
+# save
+# Pu-239 (z,2n)
+# U-235 (z,2n)
+# Am-241 (z,2n)
+# save
+# W-180 absorption
+# W-181 absorption
+# W-182 absorption
+# W-183 absorption
+# W-184 absorption
+# W-185 absorption
+# W-186 absorption
+# save
+# W-180 (z,gamma)
+# W-181 (z,gamma)
+# W-182 (z,gamma)
+# W-183 (z,gamma) m
+# W-184 (z,gamma)
+# W-185 (z,gamma) m
+# W-186 (z,gamma)
+# save

@@ -1,2 +1,2 @@
 ENDF/B-VIII.0
-analysis pointwise
+analysis multigroup
