@@ -68,7 +68,7 @@ os.system('clear')
 
 #===========================================================
 # set up a class for global variables.
-# Consise description and reasoning given here:
+# Excellent description and reasoning given here:
 # https://pythonconquerstheuniverse.wordpress.com/2010/10/20/a-globals-class-pattern-for-python/
 # All global variables are in the 'mem' namespace. This includes Tkinter widgets
 #===========================================================
@@ -1689,7 +1689,8 @@ def fileChecker(root):
                     mem.verSelectRad[k].configure(state='normal')
 
     if numFilesFound ==0:
-        logTxtAndPrint('Must download ENDF files first.\n')
+        s = 'The first step is to download at least 1 ENDF library.\n\nSelect one (or several) libraries from the top row of options, then click the "Download Now" button.\nDownload time depends on the speed of your internet connection. ENDF/B-VIII.0 is about 511 MB.\n\nAfter download is complete, enter the desired Doppler broadenting temperature and select the desired energy group structure. Then, click "Process with NJOY."\nProcessing speed depends on your computer. ENDF/B-VIII.0 takes about 1 hr min on a mid-2000-teens Mac.\n\n'
+        logTxtAndPrint('Must download ENDF files first.\nSelect')
         root.bind('<Escape>', close)
         root.mainloop()
 
@@ -2959,40 +2960,162 @@ def runBatch(root):
                     pass
 
             else:
+                # b = r'''
+                #     \begin{center}
+                #     \begin{longtable}[p]{ccc}
+                #     \caption{%s.} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
+                #     \hline
+                #     \index{%s}
+                #     \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                #     \hline
+                #     \endfirsthead
+                #     \multicolumn{2}{c}
+                #     {\tablename\ \thetable\ -- \textit{Continued from previous page}} &
+                #     \multicolumn{1}{r}
+                #     {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
+                #     \hline
+                #     \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                #     \hline
+                #     \endhead
+                #     \hline \multicolumn{3}{r}{\textit{Continued on next page}} \\
+                #     \endfoot
+                #     \hline
+                #     \endlastfoot
+                #     '''%(caption[1], caption[1], caption[1], caption[1], caption[1])
+                #
+                # c = r'''
+                # '''
+                # for i, si in enumerate(s.split('\n')):
+                #     si = si.split()
+                #     if len(si)>1:
+                #         c += \
+                #         r'''
+                #         %s & %s & %s \\'''%(si[0], si[1], si[2])
+                #     else:
+                #         c += \
+                #         r'''\\'''
                 b = r'''
                     \begin{center}
-                    \begin{longtable}[p]{ccc}
-                    \caption{%s.} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
+                    \begin{longtable}[p]{|c|cc||c|cc|}
+                    \caption{%s} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
                     \hline
-                    \index{%s}
-                    \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
-                    \hline
+                    \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                    \multicolumn{1}{c||}{\textbf{$\sigma$ (barns)}} &
+                    \multicolumn{1}{c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                    \multicolumn{1}{c|}{\textbf{$\sigma$ (barns)}}  \\ \hline
                     \endfirsthead
-                    \multicolumn{2}{c}
-                    {\tablename\ \thetable\ -- \textit{Continued from previous page}} &
-                    \multicolumn{1}{r}
+                    \multicolumn{3}{l}
+                    {\tablename\ \thetable\ -- \textit{Continued from previous page}} & \multicolumn{3}{r}
                     {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
-                    \hline
-                    \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
+                    \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                    \multicolumn{1}{c||}{\textbf{$\sigma$ (barns)}} &
+                    \multicolumn{1}{c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                    \multicolumn{1}{c|}{\textbf{$\sigma$ (barns)}} \\
                     \hline
                     \endhead
-                    \hline \multicolumn{3}{r}{\textit{Continued on next page}} \\
+                    \hline \multicolumn{6}{r}{\textit{Continued on next page.}} \\
                     \endfoot
                     \hline
                     \endlastfoot
-                    '''%(caption[1], caption[1], caption[1], caption[1], caption[1])
+                    '''%(caption[1], caption[1], caption[1], caption[1])
 
                 c = r'''
                 '''
-                for i, si in enumerate(s.split('\n')):
-                    si = si.split()
-                    if len(si)>1:
-                        c += \
-                        r'''
-                        %s & %s & %s \\'''%(si[0], si[1], si[2])
-                    else:
-                        c += \
-                        r'''\\'''
+                rows = [52, 54] # rows on page 1 of table, on subsequent pages
+                cols = 2
+                sLen = len(s.split('\n'))
+                # pages = 1+(sLen-(rows[0]*cols))/(rows[1]*cols)
+                pages = 1+ max(0, (sLen-(rows[0]*cols))/(rows[1]*cols))
+                if (max(0, sLen-(rows[0]*cols)))%(rows[1]*cols)>0:
+                    pages += 1
+
+                tallyTot = 0
+
+                s = s.split('\n')
+
+                page = 0
+                if sLen > rows[0] and pages >1:
+
+                    for p in range( max(1, pages-1) ):
+                        iRows = rows[0] if p==0 else rows[1]
+
+                        if sLen < iRows:
+                            break
+
+                        for i in range(iRows):
+                            try:
+                                if len(s[tallyTot+i].split()) >1:
+                                    si = s[tallyTot+i].split()
+                                    c += \
+                                    r'''
+                                    %s & %s & %s & '''%(si[0], si[1], si[2],)
+                                else:
+                                    c +=\
+                                    r'''& & & '''
+
+                            except: pass
+
+                            try:
+                                if len(s[tallyTot+iRows+i].split())>1:
+                                    si = s[tallyTot+iRows+i].split()
+                                    c +=r'''%s & %s & %s \\ '''%(si[0], si[1], si[2])
+                                else:
+                                    c +=\
+                                    r'''& &  \\ '''
+                            except: pass
+                            tmp = tallyTot+iRows+i+1
+                        tallyTot = tmp
+                    page = p
+
+                numLastPage = sLen-tallyTot
+                colsLastPage = 1
+                if numLastPage > rows[1]:
+                    colsLastPage +=1
+                numLastCol = numLastPage%rows[1]
+
+
+                if colsLastPage > 1:
+                    iRows = rows[0] if page == 0 else rows[1]
+
+                    for i in range(numLastCol):
+                        try:
+                            if len(s[tallyTot+i].split()) >1:
+                                si = s[tallyTot+i].split()
+                                c += \
+                                r'''
+                                %s & %s & %s &  &  &  \\'''%(si[0], si[1], si[2])
+                            else:
+                                c +=\
+                                r'''& & & & & \\'''
+                        except:
+                            pass
+
+                        try:
+                            if len(s[tallyTot+iRows+i].split())>1:
+                                si = s[tallyTot+iRows+i].split()
+                                c +=r'''%s & %s & %s  &  &  & \\ '''%(si[0], si[1], si[2])
+                            else:
+                                c +=\
+                                r'''& & & & &  \\ '''
+                        except:
+                            pass
+                        tmp = tallyTot+iRows+i+1
+                    tallyTot = tmp
+
+                try:
+                    for i in range(iRows-numLastCol):
+                        if len(s[tallyTot+i].split()) >1:
+                            si = s[tallyTot+i].split()
+                            c += \
+                            r'''
+                            %s & %s & %s & & & \\ '''%(si[0], si[1], si[2])
+                        else:
+                            c +=\
+                            r'''  & & & & &\\ '''
+                except:
+                    pass
+
+
 
 
             c +=r'''
@@ -3095,7 +3218,7 @@ def runBatch(root):
 
         with open(outputFileName, 'w') as f:
             f.write(tex)
-        for iTex in range(2): # compile twice
+        for iTex in range(3): # compile twice
             sp.check_call(['pdflatex', outputFileName])
         texFiles = [f for f in glob('%s.*'%(outputFileName.split('.')[0])) if not 'pdf' in f]
 
@@ -3152,7 +3275,6 @@ def runBatch(root):
             dataType = line.split()[-1]
             reportType = 'All Reactions'
             allXS(dataType, dirDict2[lib])
-            # for iTex in range(2): # compile 2x for hyperrefs
             texBatchPlot(saveDir, lib, dataType, reportType)
         elif 'analysis' in line.split()[0]:
             saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
@@ -3164,6 +3286,12 @@ def runBatch(root):
             allAnalyze(lib, dataType, reportType)
         else:
             libDict[lib]['xs'].append(line)
+
+    if not 'E' in libDict[lib].keys() or 'xs' in libDict[lib].keys():
+        return None
+
+    else:
+        pass
 
     for k,v in libDict.iteritems():
         if not mem.verSelect.get()==tmp[k]:
@@ -3363,7 +3491,7 @@ def texBatchPlot(figDir, lib, dataType, reportType):
     with open(outputFileName, 'w') as f:
         f.write(tex)
 
-    for i in range(2):
+    for i in range(3):
         sp.check_call(['pdflatex', outputFileName])
     texFiles = [f for f in glob('%s.*'%(outputFileName.split('.')[0])) if not 'pdf' in f]
     if not os.path.isdir('texDump'):

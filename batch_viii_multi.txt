@@ -1,0 +1,5 @@
+ENDF/B-VIII.0
+analysis pointwise
+all multigroup
+all pointwise
+all decay
