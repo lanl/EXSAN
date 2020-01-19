@@ -947,7 +947,14 @@ def addPlot(flag_pOrM, allFlag, mixFlag=False):#event=None, flag_pOrM=False):
     Av = 6.022e23 # Avogado's number
     if mixFlag:
         x = mem.mixDict['eBins']
-        y = mem.mixXS
+        if mem.microMacro.get() == 1:
+            y = mem.mixXSmacro
+        elif mem.microMacro.get() == 2:
+            y = 1./mem.mixXSmacro
+        elif mem.microMacro.get() == 3:
+            y = mem.mixXSmacro/float(mem.mixRho.get())
+        else:
+            y = mem.mixXS
         title = mem.mixTitle
 
     elif flag_pOrM:
@@ -992,14 +999,15 @@ def addPlot(flag_pOrM, allFlag, mixFlag=False):#event=None, flag_pOrM=False):
 
     N = periodicTableDict[mem.element][4]/periodicTableDict[mem.element][3]*Av
 
-    if mem.microMacro.get() == 1 and len(periodicTableDict[mem.element])== 5:
-        y = N*y*1.e-24
+    if not mixFlag:
+        if mem.microMacro.get() == 1 and len(periodicTableDict[mem.element])== 5:
+            y = N*y*1.e-24
 
-    elif mem.microMacro.get() == 2 and len(periodicTableDict[mem.element])== 5:
-        y = 1/(N*y*1.e-24)
+        elif mem.microMacro.get() == 2 and len(periodicTableDict[mem.element])== 5:
+            y = 1/(N*y*1.e-24)
 
-    elif mem.microMacro.get() == 3 and len(periodicTableDict[mem.element])== 5:
-        y = N*y*1.e-24/periodicTableDict[mem.element][4]
+        elif mem.microMacro.get() == 3 and len(periodicTableDict[mem.element])== 5:
+            y = N*y*1.e-24/periodicTableDict[mem.element][4]
 
     logTxtAndPrint('\nNumber density for %s = %.3e\n'%(mem.element, N))
 
@@ -2313,10 +2321,13 @@ def plotMix():
         np.savetxt('zz_'+mem.Select_MT.get()+'_'+title+'.txt', np.vstack((x,y)).T, '%1.4e')
 
     mixLength = 10
+    Av = 6.02e23
     mem.mixXS = np.zeros(len(mem.mixDict['eBins']))
+    mem.mixXSmacro = np.zeros(len(mem.mixDict['eBins']))
     title = ''
     weights = []
     weightsTmp = []
+    mem.mixNumberDensity = od()
 
     if mem.percentType_var.get() == 1:
         massSum = 0.
@@ -2326,7 +2337,10 @@ def plotMix():
                 elMass = periodicTableDict[el][3]
                 massSum += float(mem.entry[i].get())*elMass
                 weightsTmp.append(float(mem.entry[i].get())*elMass)
+                mem.mixNumberDensity[mem.selectVars[i].get()] = float(mem.mixRho.get())*float(mem.entry[i].get())*Av
         print massSum
+        for k,v in mem.mixNumberDensity.iteritems():
+            mem.mixNumberDensity[k] = mem.mixNumberDensity[k]/massSum
         for i, w in enumerate(weightsTmp):
             weights.append(w/massSum)
 
@@ -2335,16 +2349,19 @@ def plotMix():
             if not (mem.entry[i].get() == ''):
                 weights.append(float(mem.entry[i].get())/100.)
         weights = normalizeList(weights)
-
+        for i in range(mixLength):
+            if not (mem.entry[i].get() == ''):
+                el = mem.selectVars[i].get().split('-')[0]
+                mem.mixNumberDensity[mem.selectVars[i].get()] = float(mem.mixRho.get())*weights[i]/periodicTableDict[el][3]*Av
 
     for i in range(mixLength):
         if not (mem.entry[i].get() == ''):
             mem.mixXS += weights[i]*np.array(mem.mixDict[mem.selectVars[i].get()])
+            mem.mixXSmacro += mem.mixNumberDensity[mem.selectVars[i].get()]*np.array(mem.mixDict[mem.selectVars[i].get()])*1e-24
             if len(title) == 0:
                 title += r'%5.3f$\times$%s '%(weights[i], mem.selectVars[i].get())
             else:
                 title += r'%5.3f$\times$%s '%(weights[i], mem.selectVars[i].get())
-
     title += mem.Select_MT.get()
     mem.mixTitle = title
     e_th    = 0.025 # thermal neutron energy
@@ -2772,11 +2789,19 @@ def makeWidgets(root):
     mem.label = {}
     mem.options = {}
 
+    mem.mixRho = StringVar()
     mem.MixReaction_lab = Label(mem.tab2_frameL, text='Select reaction for mixing: ')
     mem.MixReaction_opt = OptionMenu(mem.tab2_frameL, mem.Select_MT, *mem.tmpList, command=makeMixList)
+    mem.MixReactionRho_lab = Label(mem.tab2_frameL, text='Enter mix density (g/cc):')
+    mem.MixReactionRho_ent = Entry(mem.tab2_frameL, textvariable=mem.mixRho, bg='aliceblue')
+    '''
+    mem.weightEntry = Entry(mem.tab2_frameL, textvariable=mem.weightEntryVar, bg='aliceblue')
+    '''
     mem.MixReaction_opt.configure(width=15)
     mem.MixReaction_lab.grid(row=0, column=0)
     mem.MixReaction_opt.grid(row=1, column=0)
+    mem.MixReactionRho_lab.grid(row=0, column=1)
+    mem.MixReactionRho_ent.grid(row=1, column=1)
     mem.percentType_var = IntVar()
     mem.percentTypeStr = ['Weight-%', 'Atom Ratio']
 
