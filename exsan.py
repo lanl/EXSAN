@@ -1150,7 +1150,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False, saveDir='figs'):
     # if not '-.' in lineStyles:
     if not mgFlag:
         a = [title.split()[0] for title in mem.plotTitles]
-        if len(np.unique(a))==1 and len(a)==len(mem.allListMaster[title.split()[0]]):
+        if len(np.unique(a))==1 and len(a)==len(mem.allListMaster[a[-1].split()[0]]):
             allFlag=True
 
     pl.cla()
@@ -2841,7 +2841,6 @@ def runBatch(root):
             f.write(r'delim_2 " \\dotfill "'+'\n')
 
     def allXS(plotType, dirs):
-
         writeTexIndexStyleFile()
         flag_pOrM_master = False
         saveFlag_master = True
@@ -2869,7 +2868,6 @@ def runBatch(root):
             if plotType=='multigroup':
                 flag_pOrM_master = True
                 mem.note1.select(1)
-            st()
             for k0, v0 in sorted(mem.masterTracker[plotType].items()):
                 for k1, v1 in sorted(mem.masterTracker[plotType][k0].items()):
                     try:
@@ -3005,40 +3003,6 @@ def runBatch(root):
                     pass
 
             else:
-                # b = r'''
-                #     \begin{center}
-                #     \begin{longtable}[p]{ccc}
-                #     \caption{%s.} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
-                #     \hline
-                #     \index{%s}
-                #     \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
-                #     \hline
-                #     \endfirsthead
-                #     \multicolumn{2}{c}
-                #     {\tablename\ \thetable\ -- \textit{Continued from previous page}} &
-                #     \multicolumn{1}{r}
-                #     {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
-                #     \hline
-                #     \textbf{Item} & \textbf{Isotope} & \textbf{$\sigma$ (barns)}\\
-                #     \hline
-                #     \endhead
-                #     \hline \multicolumn{3}{r}{\textit{Continued on next page}} \\
-                #     \endfoot
-                #     \hline
-                #     \endlastfoot
-                #     '''%(caption[1], caption[1], caption[1], caption[1], caption[1])
-                #
-                # c = r'''
-                # '''
-                # for i, si in enumerate(s.split('\n')):
-                #     si = si.split()
-                #     if len(si)>1:
-                #         c += \
-                #         r'''
-                #         %s & %s & %s \\'''%(si[0], si[1], si[2])
-                #     else:
-                #         c += \
-                #         r'''\\'''
                 b = r'''
                     \begin{center}
                     \begin{longtable}[p]{|c|cc||c|cc|}
@@ -3070,7 +3034,7 @@ def runBatch(root):
                 cols = 2
                 sLen = len(s.split('\n'))
                 # pages = 1+(sLen-(rows[0]*cols))/(rows[1]*cols)
-                pages = 1+ max(0, (sLen-(rows[0]*cols))/(rows[1]*cols))
+                pages = 1 + int(max(0, (sLen-(rows[0]*cols))/(rows[1]*cols)))
                 if (max(0, sLen-(rows[0]*cols)))%(rows[1]*cols)>0:
                     pages += 1
 
@@ -3123,28 +3087,26 @@ def runBatch(root):
                     iRows = rows[0] if page == 0 else rows[1]
 
                     for i in range(numLastCol):
-                        try:
-                            if len(s[tallyTot+i].split()) >1:
-                                si = s[tallyTot+i].split()
-                                c += \
-                                r'''
-                                %s & %s & %s &  &  &  \\'''%(si[0], si[1], si[2])
-                            else:
-                                c +=\
-                                r'''& & & & & \\'''
-                        except:
-                            pass
+                        if len(s[tallyTot+i].split()) > 1:
+                            si = s[tallyTot+i].split()
+                            c += \
+                            r'''
+                            %s & %s & %s & '''%(si[0], si[1], si[2])
+                        else:
+                            c += \
+                            r'''
+                            & & & '''
 
-                        try:
-                            if len(s[tallyTot+iRows+i].split())>1:
-                                si = s[tallyTot+iRows+i].split()
-                                c +=r'''%s & %s & %s  &  &  & \\ '''%(si[0], si[1], si[2])
-                            else:
-                                c +=\
-                                r'''& & & & &  \\ '''
-                        except:
-                            pass
-                        tmp = tallyTot+iRows+i+1
+                        if len(s[tallyTot+i+iRows].split()) > 1:
+                            si = s[tallyTot+iRows+i].split()
+                            c += \
+                            r'''
+                            %s & %s & %s \\ '''%(si[0], si[1], si[2])
+                        else:
+                            c += \
+                            r'''& & \\'''%()
+
+                    tmp = tallyTot+iRows+i+1
                     tallyTot = tmp
 
                 try:
@@ -3156,12 +3118,9 @@ def runBatch(root):
                             %s & %s & %s & & & \\ '''%(si[0], si[1], si[2])
                         else:
                             c +=\
-                            r'''  & & & & &\\ '''
+                            r'''  & & & & & \\ '''
                 except:
                     pass
-
-
-
 
             c +=r'''
             \end{longtable}
@@ -3169,9 +3128,6 @@ def runBatch(root):
             \newpage
             '''
             return b+c
-
-
-
 
 
         sortByDic = {
@@ -3277,7 +3233,6 @@ def runBatch(root):
         return None
 
 
-
     if mem.batchFile == None:
         root.update()
         batchFile = tkinter.filedialog.askopenfilename()
@@ -3298,11 +3253,10 @@ def runBatch(root):
     for i, (k,v) in enumerate(sorted(dirDict2.items())):
         tmp[k]=i
 
-
-
     libDict = {}
     dataType = None
     reportType = None
+
     for line in lines:
         if line in list(dirDict2.keys()):
             lib = line
@@ -3322,7 +3276,6 @@ def runBatch(root):
             dataType = line.split()[-1]
             reportType = 'All Reactions'
             allXS(dataType, dirDict2[lib])
-            st()
             texBatchPlot(saveDir, lib, dataType, reportType)
         elif 'analysis' in line.split()[0]:
             saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
@@ -3335,7 +3288,7 @@ def runBatch(root):
         else:
             libDict[lib]['xs'].append(line)
 
-    if not 'E' in list(libDict[lib].keys()) or 'xs' in list(libDict[lib].keys()):
+    if not ('E' in list(libDict[lib].keys()) or 'xs' in list(libDict[lib].keys())):
         return None
 
     else:
@@ -3368,7 +3321,7 @@ def runBatch(root):
                     allFlag = True
                     el = xs.split('-')[0]
                     iso = xs.split()[0]
-                    xs = mem.allListMasterMaster[el][iso]
+                    xs = mem.masterTracker['pointwise'][el][iso]
                     logTxtAndPrint('batch analysis: %s %s'%(lib, xs))
                     getInfo2(xs, flag_pOrM, allFlag)
                     continue
@@ -3377,8 +3330,6 @@ def runBatch(root):
                     logTxtAndPrint('batch analysis: %s %s'%(lib, xs))
                     getInfo2([xs], flag_pOrM, allFlag)
 
-            # from matplotlib.backends.backend_pdf import PdfPages as savePDF
-            # mem.savePDF = savePDF
             plotMe2(None, allFlag, saveFlag, saveDir=saveDir)
             clearAll()
             mem.Select_E1.set(libDict[k]['E'])
@@ -3483,7 +3434,7 @@ def texBatchPlot(figDir, lib, dataType, reportType):
         \begin{centering}
         \begin{figure}
           \includegraphics[width=1.0\linewidth]{%s}
-          \caption{%s}'''%(s, contentsCaption)
+          \caption[%s]{%s}'''%(s, contentsCaption.split()[0], contentsCaption)
 
         c = r''''''
         for item in indexList:
@@ -3513,8 +3464,10 @@ def texBatchPlot(figDir, lib, dataType, reportType):
     # construct file name
     lib = lib.replace('/','').replace('.','').replace('-','')
     dateTime = figDir.split('_')[1]
-    reportType = reportType.replace(' ','')
-    dataType = dataType.capitalize()
+    if not reportType:
+        reportType = 'Custom'
+    if not dataType:
+        dataType = 'Custom'
     outputFileName = '_'.join(['Report_Plots', dataType, reportType, lib])
     outputFileName = '%s_%s.tex'%(outputFileName, datetime.datetime.now().strftime("%Y%m%d%H%M"))
 
@@ -3547,103 +3500,6 @@ def texBatchPlot(figDir, lib, dataType, reportType):
     for f in texFiles:
         os.system('mv %s texDump'%(f))
     return None
-
-
-
-# #===========================================================
-# # Write LaTeX file for analysis
-# #===========================================================
-# def texAnalysis(figDir, lib, datatype, reportType):
-#     '''
-#     This module writes a LaTeX file that assembles all of the analyses
-#     and sort options.
-#
-#     Helpful links:
-#         https://texblog.org/2011/05/15/multi-page-tables-using-longtable/
-#     '''
-#
-#     def addBody(s):
-#         '''
-#         Add lines for an individual figure including caption, index
-#         labels, and and a hyperlink to the Index. This is useful for
-#         very large files!
-#         '''
-#         contents = s.split('/')[-1].split('.')[0].split('__')
-#         label = '.'.join(contents)
-#         contentsCaption = r''''''
-#         indexList = []
-#         print s
-#         for c in contents:
-#             iso, xs = c.split('_')[0:2]
-#             if c.split('_') == 3:
-#                 mg = c.split('_')[-1]
-#             el, mass = iso.split('-')
-#             contentsCaption += \
-#             r'''\textsuperscript{%s}%s %s, '''%(mass, el, xs)
-#             indexList.append(r'''%s %s'''%(iso, xs))
-#
-#         b = \
-#         r'''
-#         \begin{landscape}
-#         \begin{centering}
-#         \begin{figure}
-#           \includegraphics[width=1.0\linewidth]{%s}
-#           \caption{%s}'''%(s, contentsCaption)
-#
-#         c = r''''''
-#         for item in indexList:
-#             c += \
-#             r'''
-#             \index{%s}'''%(item)
-#
-#         b += c
-#         b += \
-#         r'''
-#           \label{fig:%s}
-#         \hyperref[index]{Index} / \hyperlink{page.1}{TOC}
-#         \end{figure}
-#         \end{centering}
-#         \end{landscape}
-#         '''%(label)
-#         return b
-#
-#
-#     #===========================================================
-#     # list of figures output by EXSAN's batch analysis
-#     #===========================================================
-#     figs = glob('%s/*'%(figDir))
-#     outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
-#
-#
-#     #===========================================================
-#     # Top and bottom of the tex file
-#     #===========================================================
-#     top, tail = texTopAndTail(lib, datatype, reportType)
-#
-#
-#     #===========================================================
-#     # Body of the tex file, one for each figure
-#     #===========================================================
-#     body = r''''''
-#     for fig in sorted(figs):
-#         body += addBody(fig)
-#
-#     #===========================================================
-#     # Make and write the entire tex file and PDF
-#     #===========================================================
-#     tex = top + body + tail
-#
-#     with open(outputFileName, 'w') as f:
-#         f.write(tex)
-#     sp.check_call(['pdflatex', outputFileName])
-#     texFiles = [f for f in glob('tex_%s*'%(outputfileName.split('_')[1])) if not 'pdf' in f]
-#     for f in texFiles:
-#         os.system('mv %s texDump')
-#     return None
-
-
-
-
 
 #===========================================================
 # create a symlink for the NJOY2016 executable file
