@@ -66,8 +66,10 @@ opt.add_argument('-v',   '--verbose', action='store_true', help='verbosity')
 opt.add_argument('-d', '--demo', action='store_true', help='demo mode')
 opt.add_argument('-a', '--auto', action='store_true', help='minimal automation when starting up')
 opt.add_argument('-l', '--log', action='store_true', help='write log file exsan.log')
+opt.add_argument('--lineWidth', type=float, default=1., help='Line width for plots')
+opt.add_argument('--markerSize', type=float, default=2., help='Marker size for radioactive decay plots')
+opt.add_argument('--figDir', help='Use this directory of figures for testing')
 options = opt.parse_args()
-
 demoIsotopes = ['H-1 total','Li-6 total']
 os.system('clear')
 
@@ -1197,7 +1199,8 @@ def plotMe2(event=None, allFlag=False, saveFlag=False, saveDir='figs'):
         r'$\overline{\phi_{fiss}(E)}$']
 
 
-    lineWidth = 2
+    # lineWidth = 1
+    lineWidth = options.lineWidth
     legendFontSize = 14 # useful for journal article plots
     if allFlag:
         legendFontSize = 10
@@ -1240,7 +1243,7 @@ def plotMe2(event=None, allFlag=False, saveFlag=False, saveDir='figs'):
 
         colorIdx = i%len(mem.c) # loop over mem.c colors
         for e in en:
-            ax1.axvline(x=e,color='darkcyan',linestyle='--')
+            ax1.axvline(x=e,color='darkcyan',linestyle='--', lw=lineWidth)
 
         l = lineStyles[i]
         if yTmp.tolist()==y.tolist():
@@ -1375,22 +1378,21 @@ def plotDecay(saveFlag=False, saveDir='figs'):
     '''
     This function will plot decay data
     '''
-    ps = 3. # scale plot markers by this value
+    # ps = 2. # scale plot markers by this value
+    ps = options.markerSize
     pDict = {
-        'Gamma': ['*', 150*ps, 0.5, 'r'],
-        'X-rays': ['x', 40*ps, 0.8, 'k'],
-        'Beta-': ['<', 90*ps, 0.5, 'b'],
-        'EC, Beta+': ['o', 60*ps, 0.5, 'y'],
-        'Alpha':  ['o', 100*ps, 0.5, 'g'],
-        'Neutrons': ['>', 100*ps, 0.5, 'm'],
-        'SF' : ['1', 100*ps*ps, 0.5, 'orange'],
-        'Protons' : ['+', 100, 0.5, 'navy'],
-        'e- (Auger, conversion)': ['o', 20*ps, 0.5, 'orange'],
-        'e- anti-neutrinos': ['|', 60*ps, 0.5, 'violet'],
-        'e- neutrinos': ['-', 60*ps, 0.5, 'slategray']}
+        'Gamma':                  ['v', 100*ps, 1.0, 'r'],
+        'X-rays':                 ['s', 5*ps, 1.0, 'k'],
+        'Beta-':                  ['<', 90*ps, 1.0, 'b'],
+        'EC, Beta+':              ['d', 60*ps, 1.0, 'y'],
+        'Alpha':                  ['o', 80*ps, 1.0, 'g'],
+        'Neutrons':               ['>', 80*ps, 1.0, 'm'],
+        'SF' :                    ['D', 80*ps*ps, 1.0, 'orange'],
+        'e- (Auger, conversion)': ['*', 30*ps, 1.0, 'darkcyan'],
+        'e- anti-neutrinos':      ['|', 60*ps, 1.0, 'violet'],
+        'e- neutrinos':           ['-', 60*ps, 1.0, 'slategray']}
 
     fig = pl.figure('Radioactive Decay', figsize=(15,8))
-    # ax = fig.add_subplot(111)
     ax = pl.subplot2grid((1,2), (0, 0))
     ax.set_axisbelow(True)
 
@@ -1421,7 +1423,11 @@ def plotDecay(saveFlag=False, saveDir='figs'):
         colorIdx = i%len(mem.c)
         c = mem.c[colorIdx]
         tableColors.append(pDict[k][3])
-        pl.scatter(xData, yData, marker=pDict[k][0], s=pDict[k][1], alpha=pDict[k][2], facecolors=pDict[k][3], edgecolors='k', label=k)
+        if pDict[k] in ['X-rays', 'SF']:
+            pl.scatter(xData, yData, marker=pDict[k][0], s=pDict[k][1], alpha=pDict[k][2], facecolors=pDict[k][3], edgecolors=pDict[k][3], label=k)
+        else:
+            pl.scatter(xData, yData, marker=pDict[k][0], s=pDict[k][1], alpha=pDict[k][2], facecolors='None', edgecolors=pDict[k][3], label=k)
+        # pl.scatter(xData, yData, marker=pDict[k][0], s=pDict[k][1], alpha=pDict[k][2], facecolors=pDict[k][3], edgecolors='k', label=k)
 
         i += 1
 
@@ -2823,11 +2829,22 @@ def makeWidgets(root):
         mem.batchFile = None
 
 
-
+#===========================================================
+# Batch mode:
+#   1) Read instructions from an input file
+#   2) Make and save requested plots
+#   3) Make plots of all cross sections in a library AND
+#      assemble them into a nicely-formatted LaTeX document
+#   4) Make rank-order analyses table AND assemble them into
+#      a nicely-formatted LaTeX document
+#===========================================================
 def runBatch(root):
     from matplotlib.backends.backend_pdf import PdfPages as savePDF
     mem.savePDF = savePDF
 
+    #===========================================================
+    # write index_style.ist, which nicely-formats an index
+    #===========================================================
     def writeTexIndexStyleFile():
         '''
         This makes a nicely-formatted index for LaTexFiles
@@ -2840,13 +2857,24 @@ def runBatch(root):
             f.write(r'delim_1 " \\dotfill "'+'\n')
             f.write(r'delim_2 " \\dotfill "'+'\n')
 
+    #===========================================================
+    # Makde PDF plots for all isotopes in an ENDF library:
+    #  1) Neutron reaction plots
+    #  2) Radioactive decay plots
+    #===========================================================
     def allXS(plotType, dirs):
+        '''
+        Create plots for all isotopes (decay or neutron reactions)
+        and put them in a timestamped folder
+        '''
         writeTexIndexStyleFile()
         flag_pOrM_master = False
         saveFlag_master = True
         allFlag_master = True
         loopList = []
         log = []
+
+        # make radioactive decay plots
         if plotType == 'decay':
             mem.note1.select(2)
             for k,v in sorted(mem.masterTracker[plotType].items()):
@@ -2862,7 +2890,7 @@ def runBatch(root):
             for i, iLog in enumerate(log):
                 print(i, iLog)
 
-
+        # make neutron cross section plots
         elif plotType =='pointwise' or plotType =='multigroup':
             mem.note1.select(0)
             if plotType=='multigroup':
@@ -2877,36 +2905,68 @@ def runBatch(root):
                         pass
                     clearAll()
 
-
+    #===========================================================
+    # Make LaTex tables of rank-order analyses
+    #===========================================================
     def allAnalyze(lib, dataType, reportType):
         writeTexIndexStyleFile()
 
+        #===========================================================
+        # Add the body of the table
+        #===========================================================
         def addBody(s, caption, dataType=None):
             if dataType == 'decay':
-                b = r'''
-                    \begin{center}
-                    \begin{longtable}[p]{|c|ccc||c|ccc|}
-                    \caption{%s} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
-                    \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
-                    \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
-                    \multicolumn{1}{c|}{\textbf{Item}} &
-                    \multicolumn{1}{c}{\textbf{Isotope}} &
-                    \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
-                    \endfirsthead
-                    \multicolumn{4}{l}
-                    {\tablename\ \thetable\ -- \textit{Continued from previous page}} & \multicolumn{4}{r}
-                    {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
-                    \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
-                    \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
-                    \multicolumn{1}{c|}{\textbf{Item}} &
-                    \multicolumn{1}{c}{\textbf{Isotope}} &
-                    \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
-                    \endhead
-                    \hline \multicolumn{8}{r}{\textit{Continued on next page.}} \\
-                    \endfoot
-                    \hline
-                    \endlastfoot
-                    '''%(caption[1], caption[1], caption[1], caption[1])
+
+                if caption[1].startswith('Half Life'):
+                    b = r'''
+                        \begin{center}
+                        \begin{longtable}[p]{|c|ccc||c|ccc|}
+                        \caption{%s} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
+                        \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                        \multicolumn{1}{c}{\textbf{Half}} & \multicolumn{1}{c||}{\textbf{Life}} &
+                        \multicolumn{1}{c|}{\textbf{Item}} &
+                        \multicolumn{1}{c}{\textbf{Isotope}} &
+                        \multicolumn{1}{c}{\textbf{Half}} & \multicolumn{1}{c|}{\textbf{Life}} \\ \hline
+                        \endfirsthead
+                        \multicolumn{4}{l}
+                        {\tablename\ \thetable\ -- \textit{Continued from previous page}} & \multicolumn{4}{r}
+                        {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
+                        \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                        \multicolumn{1}{c}{\textbf{Half}} & \multicolumn{1}{c||}{\textbf{Life}} &
+                        \multicolumn{1}{c|}{\textbf{Item}} &
+                        \multicolumn{1}{c}{\textbf{Isotope}} &
+                        \multicolumn{1}{c}{\textbf{Half}} & \multicolumn{1}{c|}{\textbf{Life}} \\ \hline
+                        \endhead
+                        \hline \multicolumn{8}{r}{\textit{Continued on next page.}} \\
+                        \endfoot
+                        \hline
+                        \endlastfoot
+                        '''%(caption[1], caption[1], caption[1], caption[1])
+                else:
+                    b = r'''
+                        \begin{center}
+                        \begin{longtable}[p]{|c|ccc||c|ccc|}
+                        \caption{%s} \hyperlink{page.1}{T.O.C.} / \hyperref[index]{Index}  \label{%s} \index{%s}\\
+                        \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                        \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
+                        \multicolumn{1}{c|}{\textbf{Item}} &
+                        \multicolumn{1}{c}{\textbf{Isotope}} &
+                        \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
+                        \endfirsthead
+                        \multicolumn{4}{l}
+                        {\tablename\ \thetable\ -- \textit{Continued from previous page}} & \multicolumn{4}{r}
+                        {\hyperref[%s]{Top of this table.} / \hyperlink{page.1}{T.O.C.} /  \hyperref[index]{Index}} \\
+                        \hline \multicolumn{1}{|c|}{\textbf{Item}} & \multicolumn{1}{c}{\textbf{Isotope}} &
+                        \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c||}{\textbf{P(decay)}} &
+                        \multicolumn{1}{c|}{\textbf{Item}} &
+                        \multicolumn{1}{c}{\textbf{Isotope}} &
+                        \multicolumn{1}{c}{\textbf{Energy (eV)}} & \multicolumn{1}{c|}{\textbf{P(decay)}} \\ \hline
+                        \endhead
+                        \hline \multicolumn{8}{r}{\textit{Continued on next page.}} \\
+                        \endfoot
+                        \hline
+                        \endlastfoot
+                        '''%(caption[1], caption[1], caption[1], caption[1])
 
                 c = r'''
                 '''
@@ -2938,10 +2998,13 @@ def runBatch(root):
 
                         if len(s[tallyTot+iRows+i].split())>1:
                             si = s[tallyTot+iRows+i].split()
-                            c +=r'''%s & %s & %s & %s \\ '''%(si[0], si[1], si[2], si[3])
+                            c +=\
+                            r'''
+                            %s & %s & %s & %s \\ '''%(si[0], si[1], si[2], si[3])
                         else:
                             c +=\
-                            r'''& & &  \\ '''
+                            r'''
+                            & & &  \\ '''
                         tmp = tallyTot+iRows+i+1
                     tallyTot = tmp
 
@@ -2960,24 +3023,26 @@ def runBatch(root):
                                 si = s[tallyTot+i].split()
                                 c += \
                                 r'''
-                                %s & %s & %s & %s &  &  &  & \\'''%(si[0], si[1], si[2], si[3])
+                                %s & %s & %s & %s &'''%(si[0], si[1], si[2], si[3])
                             else:
                                 c +=\
-                                r'''& & & & & & &  \\'''
+                                r'''
+                                & & & &'''
                         except:
                             pass
 
                         try:
-                            if len(s[tallyTot+iRows+i].split())>1:
-                                si = s[tallyTot+iRows+i].split()
-                                c +=r'''%s & %s & %s & %s &  &  &  & \\ '''%(si[0], si[1], si[2], si[3])
+                            if len(s[tallyTot+iRows+i-1].split())>1:
+                                si = s[tallyTot+iRows+i-1].split()
+                                c +=r'''
+                                %s & %s & %s & %s \\ '''%(si[0], si[1], si[2], si[3])
                             else:
                                 c +=\
-                                r'''& & & & & & &  \\ '''
+                                r'''
+                                & & & \\ '''
                         except:
                             pass
-                        tmp = tallyTot+iRows+i+1
-                    tallyTot = tmp
+                    tallyTot += i
 
                 else:
                     for i in range(numLastCol):
@@ -2987,7 +3052,8 @@ def runBatch(root):
                             r'''
                             %s & %s & %s & %s &  &  &  & \\'''%(si[0], si[1], si[2], si[3])
                         else:
-                            c += r'''& & & & & & &  \\ '''
+                            c += r'''
+                            & & & & & & &  \\ '''
 
                 try:
                     for i in range(iRows-numLastCol):
@@ -2998,7 +3064,8 @@ def runBatch(root):
                             %s & %s & %s & %s & & & & \\ '''%(si[0], si[1], si[2], si[3])
                         else:
                             c +=\
-                            r'''  & & & & & & &\\ '''
+                            r'''
+                            & & & & & & & \\ '''
                 except:
                     pass
 
@@ -3129,7 +3196,6 @@ def runBatch(root):
             '''
             return b+c
 
-
         sortByDic = {
             0: 'By isotope',
             1: 'By value',
@@ -3152,11 +3218,13 @@ def runBatch(root):
             mem.decaySortIsotopeEnergy,
             mem.decaySortOccurrence]
 
+        # make top and tail of LaTex rank-order analysis document
         top, tail = texTopAndTail(lib, dataType, reportType)
         body = r''''''
 
         mem.note1.select(tabDict[dataType])
 
+        # make the body of the LaTeX rank-order 'decay' analysis document
         if dataType == 'decay':
             mem.Select_MT.set('radioactive_decay')
             master_list(mem.tab01)
@@ -3173,7 +3241,6 @@ def runBatch(root):
                     if not sortOpt['state'] == 'disabled':
                         opts[j] = sortOpt['text'].replace('eV','Energy').replace('P(E)','Probability of Emission').replace('T-\xbd','Half Life')
                 decayOptsDict[i] = opts
-                # print(i, opt, opts)
 
             for i, j in enumerate(mem.decayTypeDict.keys()):
                 if not i in list(decayOptsDict.keys()):
@@ -3182,12 +3249,11 @@ def runBatch(root):
                 for k,v in sorted(decayOptsDict[i].items()):
                     mem.decaySort.set(k)
                     displayAnalysis()
-                    # print('%s %s'%(j, v))
-                    # print(mem.resultsText.get('3.0',END))
 
                     caption = [i, '%s Decay Sorted By %s'%(j, v)]
                     body += addBody(mem.resultsText.get('3.0',END), caption, dataType=dataType)
 
+        # make the body of the LaTeX rank-order cross section analysis document
         else:
             MTlist = sorted([int(mt) for mt in list(mtdic2.keys()) if int(mt) <=107])
             MTlist.append('849')
@@ -3207,12 +3273,8 @@ def runBatch(root):
                         body += addBody(mem.resultsText.get('3.0',END), caption)
 
 
+        # add top, body, and tail sections
         tex = top.encode('ascii','ignore') + body.encode('ascii','ignore') + tail.encode('ascii','ignore')
-        # tex = top.encode('ascii','ignore') +  tail.encode('ascii','ignore')
-        # tex = str(tex)
-
-        # outputFileName = 'texAnalysis_%s.tex'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
-        # outputFileName = 'Report_Anaysis_Pointwise.tex'
 
         # construct output file name
         lib = lib.replace('/','').replace('.','').replace('-','')
@@ -3221,7 +3283,7 @@ def runBatch(root):
 
         with open(outputFileName, 'wb') as f:
             f.write(tex)
-        for iTex in range(3): # compile twice
+        for iTex in range(3): # compile 3x
             sp.check_call(['pdflatex', outputFileName])
         texFiles = [f for f in glob('%s.*'%(outputFileName.split('.')[0])) if not 'pdf' in f]
 
@@ -3232,19 +3294,21 @@ def runBatch(root):
             os.system('mv %s texDump'%(f))
         return None
 
-
+    # get batch file
     if mem.batchFile == None:
         root.update()
         batchFile = tkinter.filedialog.askopenfilename()
     else:
         batchFile = mem.batchFile
 
+    # read batch file
     with open(batchFile,'r') as f:
         tmp = f.readlines()
         lines = []
         for line in tmp:
             lines.append(line.strip())
 
+    # parse batch file -- remove comments
     commentLines = [i for (i,l) in enumerate(lines) if l[0]=='#']
     for cl in commentLines[::-1]:
         lines.pop(cl)
@@ -3258,16 +3322,24 @@ def runBatch(root):
     reportType = None
 
     for line in lines:
+
+        # the first line of the batch file must include the library
         if line in list(dirDict2.keys()):
             lib = line
             libDict[line] = {}
             libDict[lib]['save'] = []
+
+        # read custom energy
         elif 'E=' in line or 'E =' in line:
             libDict[lib]['E'] = float(line.split('=')[-1])
             libDict[lib]['xs'] = []
+
+        # save previously listed plots together
         elif line == 'save':
             libDict[lib]['save'].append(libDict[lib]['xs'])
             libDict[lib]['xs'] = []
+
+        # make plots for all isotopes in the library
         elif 'all' in line.split()[0]:
             saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
             if not mem.verSelect.get()==tmp[lib]:
@@ -3275,8 +3347,15 @@ def runBatch(root):
                 update_files()
             dataType = line.split()[-1]
             reportType = 'All Reactions'
-            allXS(dataType, dirDict2[lib])
+
+            if options.figDir:
+                saveDir = options.figDir
+            else:
+                allXS(dataType, dirDict2[lib])
+
             texBatchPlot(saveDir, lib, dataType, reportType)
+
+        # make rank-order analysis tables
         elif 'analysis' in line.split()[0]:
             saveDir = 'figs_%s'%(datetime.datetime.now().strftime("%Y%m%d%H%M"))
             if not mem.verSelect.get()==tmp[lib]:
@@ -3285,15 +3364,19 @@ def runBatch(root):
             dataType = line.split()[-1]
             reportType = 'Analysis'
             allAnalyze(lib, dataType, reportType)
+
+        # add individually listed cross sections to the 'save' list
         else:
             libDict[lib]['xs'].append(line)
 
+    # do nothing...?
     if not ('E' in list(libDict[lib].keys()) or 'xs' in list(libDict[lib].keys())):
         return None
 
     else:
         pass
 
+    # make individual plots from batch file
     for k,v in libDict.items():
         if not mem.verSelect.get()==tmp[k]:
             mem.verSelect.set(tmp[k])
@@ -3333,10 +3416,12 @@ def runBatch(root):
             plotMe2(None, allFlag, saveFlag, saveDir=saveDir)
             clearAll()
             mem.Select_E1.set(libDict[k]['E'])
-        # for iTex in range(2): # compile 2x for hyperrefs
         texBatchPlot(saveDir, lib, dataType, reportType)
 
 
+#===========================================================
+# Write top (preambles, etc.) and tail parts of LaTeX file
+#===========================================================
 def texTopAndTail(endf, dataType, reportType):
         texTop = r'''
         \documentclass{article}
@@ -3395,7 +3480,6 @@ def texTopAndTail(endf, dataType, reportType):
 #===========================================================
 # Write LaTeX file containing plots from batch file
 #===========================================================
-
 def texBatchPlot(figDir, lib, dataType, reportType):
     '''
     This module writes a LaTeX file that assembles all of the figures
@@ -3408,7 +3492,7 @@ def texBatchPlot(figDir, lib, dataType, reportType):
         https://texblog.org/2007/11/07/headerfooter-in-latex-with-fancyhdr/
     '''
 
-    def addBody(s):
+    def addBody(s, custom=False):
         '''
         Add lines for an individual figure including caption, index
         labels, and and a hyperlink to the Index. This is useful for
@@ -3428,13 +3512,18 @@ def texBatchPlot(figDir, lib, dataType, reportType):
             r'''\textsuperscript{%s}%s %s, '''%(mass, el, xs)
             indexList.append(r'''%s %s'''%(iso, xs))
 
+        if custom:
+            shortCaption = contentsCaption
+        else:
+            shortCaption = contentsCaption.split()[0]
+
         b = \
         r'''
         \begin{landscape}
         \begin{centering}
         \begin{figure}
           \includegraphics[width=1.0\linewidth]{%s}
-          \caption[%s]{%s}'''%(s, contentsCaption.split()[0], contentsCaption)
+          \caption[%s]{%s}'''%(s, shortCaption, contentsCaption)
 
         c = r''''''
         for item in indexList:
@@ -3453,13 +3542,12 @@ def texBatchPlot(figDir, lib, dataType, reportType):
         '''%(label)
         return b
 
-
     #===========================================================
     # list of figures output by EXSAN's batch analysis
     #===========================================================
     figs = glob('%s/*'%(figDir))
-    outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
-    outputFileName = 'Report_Plots_Pointwise_All_ENDFBVIII0.tex'
+    # outputFileName = 'tex_%s.tex'%(figDir.split('_')[-1])
+    # outputFileName = 'Report_Plots_Pointwise_All_ENDFBVIII0.tex'
 
     # construct file name
     lib = lib.replace('/','').replace('.','').replace('-','')
@@ -3468,26 +3556,32 @@ def texBatchPlot(figDir, lib, dataType, reportType):
         reportType = 'Custom'
     if not dataType:
         dataType = 'Custom'
-    outputFileName = '_'.join(['Report_Plots', dataType, reportType, lib])
-    outputFileName = '%s_%s.tex'%(outputFileName, datetime.datetime.now().strftime("%Y%m%d%H%M"))
-
     #===========================================================
     # Top and bottom of the tex file
     #===========================================================
     top, tail = texTopAndTail(lib, dataType, reportType)
 
-
     #===========================================================
     # Body of the tex file, one for each figure
     #===========================================================
+    if reportType == 'All Reactions':
+        useLongCaption = False
+    else:
+        useLongCaption = True
+
     body = r''''''
     for fig in sorted(figs):
-        body += addBody(fig)
+        body += addBody(fig, custom=useLongCaption)
 
     #===========================================================
     # Make and write the entire tex file and PDF
     #===========================================================
     tex = top + body + tail
+
+    reportType = reportType.replace(' ','_')
+    outputFileName = '_'.join(['Report_Plots', dataType, reportType, lib])
+    # outputFileName = '%s_%s.tex'%(outputFileName, datetime.datetime.now().strftime("%Y%m%d%H%M"))
+    outputFileName = '%s_%s.tex'%(outputFileName, figDir.split('_')[-1])
 
     with open(outputFileName, 'w') as f:
         f.write(tex)
